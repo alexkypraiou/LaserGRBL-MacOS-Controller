@@ -131,3 +131,9 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 You need to already have your Arduino Uno board or any board you using updated with the GRBL firmware.More info https://howtomechatronics.com/tutorials/how-to-setup-grbl-control-cnc-machine-with-arduino/ (The instructions are not mine).
 The project is open source,you can try your own stuff and make every changes you want.
+
+
+# Inspiration
+
+https://www.youtube.com/watch?v=td4DWtMY7SQ
+Looking this video i was looking to make the same simple CNC Machine using an Arduino Uno Board and an CNC Shield board.I am currently using both Windows and Macbook,the video shows that you can use the open source software LaserGRBL https://github.com/arkypita/LaserGRBL that is only for Windows.I was looking to make a open source software like this also for MacOS user(like me) so you don't have to switch operating system for this project.More updates soon.
