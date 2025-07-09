@@ -125,6 +125,23 @@ Fork the repository and submit a pull request.
 
 For detailed contribution guidelines, please see the [CONTRIBUTING.md](CONTRIBUTING.md) file.
 
+## Development and Testing
+
+For developers working on this project:
+
+**Run tests:**
+```bash
+python test_laser_controller.py
+```
+
+**Development utilities:**
+```bash
+python dev_utils.py all     # Run all checks
+python dev_utils.py test    # Run tests only
+python dev_utils.py deps    # Check dependencies
+python dev_utils.py help    # Show available commands
+```
+
 # License
 This project is licensed under the MIT License - see the LICENSE file for details.
 

@@ -90,11 +90,13 @@ class LaserControllerApp(QWidget):
         self.setMinimumSize(1000, 700)
         self.setGeometry(100, 100, 1400, 900)
 
+        # Main window layout: horizontal split between controls (left) and preview (right)
         main_layout = QHBoxLayout()
         main_layout.setContentsMargins(10, 10, 10, 10)
         main_layout.setSpacing(15)
 
-        # --- Left Panel (Controls) - Wrapped in QScrollArea ---
+        # --- Left Panel (Controls) - Wrapped in QScrollArea for small screens ---
+        # Scrollable area ensures usability on smaller displays
         scroll_area = QScrollArea(self)
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -603,7 +605,15 @@ class LaserControllerApp(QWidget):
         """)
         
     def update_ui_state(self, connected):
-        """Updates the enabled/disabled state of UI elements based on connection status."""
+        """
+        Updates the enabled/disabled state of UI elements based on connection status.
+        
+        This method manages the UI state to ensure that only appropriate controls
+        are available based on the current connection status and selected image.
+        
+        Args:
+            connected (bool): True if connected to GRBL device, False otherwise
+        """
         is_image_selected = (self.image_path is not None)
 
         self.send_gcode_button.setEnabled(connected)
@@ -646,7 +656,13 @@ class LaserControllerApp(QWidget):
             self.status_label.setStyleSheet("font-weight: bold; color: #ff6347;")
 
     def populate_serial_ports(self):
-        """Populates the QComboBox with available serial ports."""
+        """
+        Populates the serial port combo box with available ports.
+        
+        Scans the system for available serial ports and adds them to the
+        port selection combo box. If no ports are found, disables the
+        connect button and shows appropriate message.
+        """
         self.port_combo.clear()
         available_ports = QSerialPortInfo.availablePorts()
         if not available_ports:
@@ -660,7 +676,12 @@ class LaserControllerApp(QWidget):
             self.update_ui_state(False)
 
     def toggle_connection(self):
-        """Toggles the serial port connection."""
+        """
+        Toggles the serial port connection state.
+        
+        If currently connected, disconnects from the serial port.
+        If currently disconnected, attempts to connect to the selected port.
+        """
         if self.serial_port.isOpen():
             self.disconnect_serial()
         else:

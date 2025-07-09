@@ -64,6 +64,8 @@ If you encounter bugs or have feature requests:
 ## Testing
 
 - Test your changes thoroughly before submitting
+- Run the test suite: `python test_laser_controller.py`
+- Use development utilities: `python dev_utils.py all`
 - If adding new features, consider adding unit tests
 - Ensure the application runs without errors
 - Test on different screen sizes and resolutions when applicable
