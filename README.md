@@ -41,74 +41,109 @@ Optimized Layout: Responsive design with a scrollable control panel for efficien
 
 # How to Run the Application
 
+## Quick Start
+
+For the fastest setup, use our automated launcher:
+
+```bash
+git clone https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller
+cd LaserGRBL-MacOS-Controller
+python3 run_app.py
+```
+
+The launcher will check your Python version, install dependencies automatically, and start the application.
+
+## Manual Installation
 
 To run this application, you need to have Python installed on your macOS system. It's recommended to use a virtual environment to manage project dependencies.
 
-Step 1: Install Python (if you don't have it)
-macOS comes with Python pre-installed, but it might be an older version (e.g., Python 2.x). For this application, Python 3.x is required.
+### Step 1: Install Python (if you don't have it)
+macOS comes with Python pre-installed, but it might be an older version (e.g., Python 2.x). For this application, Python 3.8 or higher is required.
 
 You can install Python 3 using Homebrew, a popular package manager for macOS.
 
-Install Homebrew (if you don't have it):
+**Install Homebrew (if you don't have it):**
 Open your Terminal (Applications/Utilities/Terminal.app) and paste the following command. Press Enter and follow the on-screen instructions.
 
-
-
+```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+```
 You might be asked to enter your password. This command will also install Xcode Command Line Tools if they are not already present.
 
-Install Python 3 using Homebrew:
+**Install Python 3 using Homebrew:**
 Once Homebrew is installed, run this command in your Terminal:
 
-
-
+```bash
 brew install python
+```
 This will install the latest stable version of Python 3. You can verify the installation by running:
 
-
-
+```bash
 python3 --version
+```
 It should show a version like Python 3.x.x.
 
-Step 2: Clone the Repository
+### Step 2: Clone the Repository
 Navigate to the directory where you want to save the project in your Terminal, then clone the repository:
 
-
-
+```bash
 git clone https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller
 cd LaserGRBL-MacOS-Controller
+```
 
+### Step 3: Install Dependencies
+Install the required Python packages using pip:
 
-Step 3: Create a Virtual Environment (Recommended)
-It's best practice to create a virtual environment to isolate the project's dependencies from your system's global Python packages. This prevents conflicts and keeps your project clean.
+```bash
+pip3 install -r requirements.txt
+```
 
+Or create a virtual environment first (recommended):
 
-
+```bash
 python3 -m venv venv
-This command creates a new directory named venv inside your project folder, which will contain the virtual environment.
-
-Step 4: Activate the Virtual Environment
-Before installing dependencies or running the application, you need to activate the virtual environment:
-
-
-
 source venv/bin/activate
-You will notice (venv) appear at the beginning of your Terminal prompt, indicating that the virtual environment is active.
+pip install -r requirements.txt
+```
 
-Step 5: Install Dependencies
-With the virtual environment activated, install the required Python packages:
+### Step 4: Run the Application
+Start the application:
 
+```bash
+python3 LaserGRBLMacOS.py
+```
 
+Or use the automated launcher:
 
-pip install PyQt6 PyQt6-Qt PySerial Pillow
-This command will download and install PyQt6, PySerial, and Pillow (PIL) into your virtual environment.
+```bash
+python3 run_app.py
+```
 
-Step 6: Run the Application
-Finally, execute the main Python script to launch the application:
+## Development and Testing
 
+### Running Tests
+To run the unit tests:
 
+```bash
+# If pytest is installed
+pytest
 
-python LaserGRBLMacOS.py
+# Or run tests directly
+python3 -m pytest tests/
+
+# Or run without pytest
+python3 tests/test_laser_controller.py
+```
+
+### Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed contribution guidelines.
+
+## Troubleshooting
+
+- **PyQt6 not found**: Make sure you have installed PyQt6: `pip3 install PyQt6`
+- **Permission denied**: On macOS, you may need to grant permission for the app to access USB/serial devices
+- **No serial ports found**: Ensure your GRBL device is connected and drivers are installed
+- **Image conversion fails**: Check that the image file exists and is in a supported format (PNG, JPG, BMP, GIF)
 
 
 When you are done working with the application, you can deactivate the virtual environment by simply typing:

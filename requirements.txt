@@ -1,0 +1,13 @@
+# LaserGRBL-MacOS-Controller Dependencies
+# GUI Framework
+PyQt6>=6.5.0
+
+# Image processing
+Pillow>=9.0.0
+
+# Serial communication (included with PyQt6)
+# PyQt6 includes QtSerialPort module
+
+# Development and testing dependencies (optional)
+pytest>=7.0.0
+pytest-qt>=4.0.0
