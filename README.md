@@ -126,3 +126,7 @@ Fork the repository and submit a pull request.
 # License
 This project is licensed under the MIT License - see the LICENSE file for details.
 (You should create a LICENSE file in your repository with the full MIT License text.)
+
+# NOTE
+
+You need to already have your Arduino Uno board or any board you using updated with the GRBL firmware.More info https://howtomechatronics.com/tutorials/how-to-setup-grbl-control-cnc-machine-with-arduino/ (The instructions are not mine).
