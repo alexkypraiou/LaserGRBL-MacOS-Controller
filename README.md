@@ -31,3 +31,9 @@ G-code Path Preview: Visualizes the generated or loaded G-code paths, including 
 Dark Theme: A modern, eye-pleasing dark user interface.
 
 Optimized Layout: Responsive design with a scrollable control panel for efficient use on various screen sizes.
+
+
+# Screenshots
+
+
+<img width="1705" alt="Στιγμιότυπο οθόνης 2025-07-09, 21 54 46" src="https://github.com/user-attachments/assets/8661bce1-297d-43bf-89f9-9ca75576b2e6" />
