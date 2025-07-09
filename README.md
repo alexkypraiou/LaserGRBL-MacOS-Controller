@@ -52,7 +52,7 @@ You can install Python 3 using Homebrew, a popular package manager for macOS.
 Install Homebrew (if you don't have it):
 Open your Terminal (Applications/Utilities/Terminal.app) and paste the following command. Press Enter and follow the on-screen instructions.
 
-Bash
+
 
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 You might be asked to enter your password. This command will also install Xcode Command Line Tools if they are not already present.
@@ -60,12 +60,12 @@ You might be asked to enter your password. This command will also install Xcode 
 Install Python 3 using Homebrew:
 Once Homebrew is installed, run this command in your Terminal:
 
-Bash
+
 
 brew install python
 This will install the latest stable version of Python 3. You can verify the installation by running:
 
-Bash
+
 
 python3 --version
 It should show a version like Python 3.x.x.
@@ -73,7 +73,7 @@ It should show a version like Python 3.x.x.
 Step 2: Clone the Repository
 Navigate to the directory where you want to save the project in your Terminal, then clone the repository:
 
-Bash
+
 
 git clone https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller
 cd LaserGRBL-MacOS-Controller
@@ -82,7 +82,7 @@ cd LaserGRBL-MacOS-Controller
 Step 3: Create a Virtual Environment (Recommended)
 It's best practice to create a virtual environment to isolate the project's dependencies from your system's global Python packages. This prevents conflicts and keeps your project clean.
 
-Bash
+
 
 python3 -m venv venv
 This command creates a new directory named venv inside your project folder, which will contain the virtual environment.
@@ -90,7 +90,7 @@ This command creates a new directory named venv inside your project folder, whic
 Step 4: Activate the Virtual Environment
 Before installing dependencies or running the application, you need to activate the virtual environment:
 
-Bash
+
 
 source venv/bin/activate
 You will notice (venv) appear at the beginning of your Terminal prompt, indicating that the virtual environment is active.
@@ -98,7 +98,7 @@ You will notice (venv) appear at the beginning of your Terminal prompt, indicati
 Step 5: Install Dependencies
 With the virtual environment activated, install the required Python packages:
 
-Bash
+
 
 pip install PyQt6 PyQt6-Qt PySerial Pillow
 This command will download and install PyQt6, PySerial, and Pillow (PIL) into your virtual environment.
@@ -106,14 +106,14 @@ This command will download and install PyQt6, PySerial, and Pillow (PIL) into yo
 Step 6: Run the Application
 Finally, execute the main Python script to launch the application:
 
-Bash
+
 
 python LaserGRBLMacOS.py
 
 
 When you are done working with the application, you can deactivate the virtual environment by simply typing:
 
-Bash
+
 
 deactivate
 # Contributing
@@ -130,3 +130,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 # NOTE
 
 You need to already have your Arduino Uno board or any board you using updated with the GRBL firmware.More info https://howtomechatronics.com/tutorials/how-to-setup-grbl-control-cnc-machine-with-arduino/ (The instructions are not mine).
+The project is open source,you can try your own stuff and make every changes you want.
