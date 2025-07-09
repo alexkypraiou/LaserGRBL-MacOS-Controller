@@ -776,11 +776,16 @@ class LaserControllerApp(QWidget):
         
         command_b = (command + '\n').encode('utf-8')
         try:
-            self.serial_port.write(command_b)
+            bytes_written = self.serial_port.write(command_b)
+            if bytes_written == -1:
+                QMessageBox.critical(self, "Send Error", f"Failed to write command '{command}' to serial port.")
+                return
+            if not self.serial_port.waitForBytesWritten(1000):  # Wait up to 1 second
+                QMessageBox.warning(self, "Send Warning", f"Command '{command}' may not have been fully transmitted.")
             self.grbl_output_text.append(f"<span style='color: #ffff00;'>Sent: {command}</span>")
             self.grbl_output_text.verticalScrollBar().setValue(self.grbl_output_text.verticalScrollBar().maximum())
         except Exception as e:
-            QMessageBox.critical(self, "Send Error", f"Failed to send command: {e}")
+            QMessageBox.critical(self, "Send Error", f"Failed to send command '{command}': {str(e)}\n\nCheck serial connection and try reconnecting.")
 
     def _send_next_gcode_command(self):
         """Sends the next G-code command from the queue."""
@@ -960,8 +965,14 @@ class LaserControllerApp(QWidget):
 
         try:
             img = Image.open(self.image_path).convert('L') # Convert to grayscale
+        except FileNotFoundError:
+            QMessageBox.critical(self, "Image Loading Error", f"Image file not found: {self.image_path}")
+            return
+        except PermissionError:
+            QMessageBox.critical(self, "Image Loading Error", f"Permission denied accessing image file: {self.image_path}")
+            return
         except Exception as e:
-            QMessageBox.critical(self, "Image Loading Error", f"Failed to load image: {e}")
+            QMessageBox.critical(self, "Image Loading Error", f"Failed to load image '{self.image_path}': {str(e)}\n\nSupported formats: PNG, JPG, BMP, GIF")
             return
 
         # Calculate pixels based on target mm and PPM
