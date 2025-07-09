@@ -1,0 +1,1138 @@
+import sys
+import re
+from PyQt6.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QComboBox, QMessageBox, QTextEdit, QFileDialog, QLineEdit, QSlider, QFrame,
+    QSizePolicy, QGridLayout, QCheckBox, QGraphicsView, QGraphicsScene,
+    QGraphicsLineItem, QGraphicsRectItem, QGraphicsTextItem, QGroupBox, QScrollArea
+)
+from PyQt6.QtSerialPort import QSerialPort, QSerialPortInfo
+from PyQt6.QtCore import QIODevice, QTimer, Qt, QByteArray, QRectF
+from PyQt6.QtGui import (
+    QPixmap, QColor, QPen, QTransform, QPainterPath, QDoubleValidator, QPainter, QFont
+)
+from PIL import Image, ImageQt # type: ignore
+
+class LaserControllerApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.serial_port = QSerialPort()
+        self.image_path = None
+        
+        self.current_x = 0.0
+        self.current_y = 0.0
+        self.current_z = 0.0
+        self.grbl_status = "Disconnected"
+        
+        self.jog_step = 1.0 
+        self.preview_image_resolution_ppm = 5 # Pixels per Millimeter for image conversion
+        self.laser_threshold = 200 # Pixel intensity threshold for laser ON (0-255)
+        
+        self.grbl_detect_timer = QTimer(self)
+        self.grbl_detect_timer.setSingleShot(True)
+        self.grbl_detect_timer.timeout.connect(self._check_grbl_response)
+        self.grbl_response_buffer = ""
+
+        self.status_timer = QTimer(self)
+        self.status_timer.timeout.connect(self.request_grbl_status)
+        
+        # List to hold G-code commands for sequential sending
+        self.gcode_to_send_queue = []
+        self.gcode_send_timer = QTimer(self)
+        self.gcode_send_timer.setSingleShot(True) # Send one command at a time
+        self.gcode_send_timer.timeout.connect(self._send_next_gcode_command)
+
+        self.initUI()
+        self.apply_styles() # Apply custom styles
+        self.populate_serial_ports()
+
+    def initUI(self):
+        self.setWindowTitle('Laser GRBL Controller - Precision')
+        self.setMinimumSize(1000, 700) # Slightly smaller minimum, relies on QScrollArea
+        self.setGeometry(100, 100, 1400, 900) # Initial size
+
+        main_layout = QHBoxLayout()
+        main_layout.setContentsMargins(10, 10, 10, 10) # Padding for the whole window
+        main_layout.setSpacing(15) # Spacing between main panels
+
+        # --- Left Panel (Controls) - Wrapped in QScrollArea ---
+        # This is the key change for optimization on smaller screens
+        scroll_area = QScrollArea(self)
+        scroll_area.setWidgetResizable(True) # Allow the widget inside to resize
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff) # Only vertical scrollbar
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        left_panel_container = QWidget(self) # Container for all group boxes
+        left_panel_layout = QVBoxLayout(left_panel_container)
+        left_panel_layout.setSpacing(12) # Spacing between groups
+        left_panel_layout.setContentsMargins(0, 0, 0, 0) # No extra padding inside the panel
+
+        # --- Serial Port Connection Group ---
+        port_connection_group = QGroupBox('Serial Port Connection', self)
+        port_connection_layout = QVBoxLayout(port_connection_group)
+        port_connection_layout.setSpacing(8)
+        port_connection_layout.setContentsMargins(10, 20, 10, 10)
+
+        port_selection_layout = QHBoxLayout()
+        port_selection_layout.addWidget(QLabel('Port:'))
+        self.port_combo = QComboBox(self)
+        self.port_combo.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred) # Allow combo box to expand
+        port_selection_layout.addWidget(self.port_combo)
+        self.refresh_ports_button = QPushButton('Refresh Ports', self)
+        self.refresh_ports_button.clicked.connect(self.populate_serial_ports)
+        port_selection_layout.addWidget(self.refresh_ports_button)
+        port_connection_layout.addLayout(port_selection_layout)
+
+        self.connect_button = QPushButton('Connect', self)
+        self.connect_button.clicked.connect(self.toggle_connection)
+        port_connection_layout.addWidget(self.connect_button)
+        
+        self.status_label = QLabel('Status: Disconnected', self)
+        self.status_label.setObjectName("statusLabel")
+        port_connection_layout.addWidget(self.status_label)
+        
+        self.pos_label = QLabel('Position (WPos): X: 0.00 Y: 0.00 Z: 0.00', self)
+        self.pos_label.setObjectName("posLabel")
+        port_connection_layout.addWidget(self.pos_label)
+        left_panel_layout.addWidget(port_connection_group)
+
+        # --- Jogging Controls Group ---
+        jog_group = QGroupBox('Jogging Controls', self)
+        jog_layout = QVBoxLayout(jog_group)
+        jog_layout.setSpacing(8)
+        jog_layout.setContentsMargins(10, 20, 10, 10)
+
+        jog_step_layout = QHBoxLayout()
+        jog_step_layout.addWidget(QLabel('Step (mm):'))
+        self.jog_step_input = QLineEdit(str(self.jog_step), self)
+        self.jog_step_input.setValidator(QDoubleValidator(0.01, 999.0, 3))
+        self.jog_step_input.editingFinished.connect(self.update_jog_step)
+        jog_step_layout.addWidget(self.jog_step_input)
+        jog_layout.addLayout(jog_step_layout)
+
+        jog_buttons_grid = QGridLayout()
+        jog_buttons_grid.setSpacing(5)
+
+        self.jog_btn_z_plus = QPushButton('Z+', self)
+        self.jog_btn_z_plus.clicked.connect(lambda: self.send_jog_command_z(self.jog_step))
+        jog_buttons_grid.addWidget(self.jog_btn_z_plus, 0, 3)
+
+        self.jog_btn_y_plus = QPushButton('Y+', self)
+        self.jog_btn_y_plus.clicked.connect(lambda: self.send_jog_command(0, self.jog_step))
+        jog_buttons_grid.addWidget(self.jog_btn_y_plus, 1, 1)
+
+        self.jog_btn_x_minus = QPushButton('X-', self)
+        self.jog_btn_x_minus.clicked.connect(lambda: self.send_jog_command(-self.jog_step, 0))
+        jog_buttons_grid.addWidget(self.jog_btn_x_minus, 2, 0)
+        
+        self.jog_btn_home = QPushButton('Home ($H)', self)
+        self.jog_btn_home.clicked.connect(lambda: self.send_command('$H'))
+        jog_buttons_grid.addWidget(self.jog_btn_home, 2, 1)
+        
+        self.jog_btn_x_plus = QPushButton('X+', self)
+        self.jog_btn_x_plus.clicked.connect(lambda: self.send_jog_command(self.jog_step, 0))
+        jog_buttons_grid.addWidget(self.jog_btn_x_plus, 2, 2)
+
+        self.jog_btn_y_minus = QPushButton('Y-', self)
+        self.jog_btn_y_minus.clicked.connect(lambda: self.send_jog_command(0, -self.jog_step))
+        jog_buttons_grid.addWidget(self.jog_btn_y_minus, 3, 1)
+        
+        self.jog_btn_z_minus = QPushButton('Z-', self)
+        self.jog_btn_z_minus.clicked.connect(lambda: self.send_jog_command_z(-self.jog_step))
+        jog_buttons_grid.addWidget(self.jog_btn_z_minus, 4, 3)
+
+        jog_layout.addLayout(jog_buttons_grid)
+        
+        control_buttons_layout = QHBoxLayout()
+        control_buttons_layout.setSpacing(5)
+
+        self.jog_btn_set_origin = QPushButton('Set Origin', self)
+        self.jog_btn_set_origin.clicked.connect(self.set_origin)
+        control_buttons_layout.addWidget(self.jog_btn_set_origin)
+
+        self.jog_btn_unlock = QPushButton('Unlock ($X)', self)
+        self.jog_btn_unlock.clicked.connect(lambda: self.send_command('$X'))
+        control_buttons_layout.addWidget(self.jog_btn_unlock)
+        
+        self.jog_btn_soft_reset = QPushButton('Soft Reset', self)
+        self.jog_btn_soft_reset.clicked.connect(lambda: self.send_command('\x18'))
+        control_buttons_layout.addWidget(self.jog_btn_soft_reset)
+        jog_layout.addLayout(control_buttons_layout)
+        
+        left_panel_layout.addWidget(jog_group)
+
+        # --- Laser/Feed Rate Sliders Group ---
+        sliders_group = QGroupBox('Laser & Feed Rate Settings', self)
+        sliders_layout = QVBoxLayout(sliders_group)
+        sliders_layout.setSpacing(8)
+        sliders_layout.setContentsMargins(10, 20, 10, 10)
+
+        laser_power_layout = QHBoxLayout()
+        laser_power_layout.addWidget(QLabel('Laser Power (S):'))
+        self.laser_power_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self.laser_power_slider.setRange(0, 1000)
+        self.laser_power_slider.setValue(0)
+        self.laser_power_slider.setTickInterval(100)
+        self.laser_power_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.laser_power_slider.valueChanged.connect(self.update_laser_power_label)
+        self.laser_power_slider.sliderReleased.connect(self.send_laser_power_command)
+        laser_power_layout.addWidget(self.laser_power_slider)
+        self.laser_power_label = QLabel('S: 0', self)
+        self.laser_power_label.setFixedWidth(50)
+        laser_power_layout.addWidget(self.laser_power_label)
+        sliders_layout.addLayout(laser_power_layout)
+
+        feed_rate_layout = QHBoxLayout()
+        feed_rate_layout.addWidget(QLabel('Feed Rate (F):'))
+        self.feed_rate_slider = QSlider(Qt.Orientation.Horizontal, self)
+        self.feed_rate_slider.setRange(100, 5000)
+        self.feed_rate_slider.setValue(1000)
+        self.feed_rate_slider.setTickInterval(500)
+        self.feed_rate_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.feed_rate_slider.valueChanged.connect(self.update_feed_rate_label)
+        self.feed_rate_slider.sliderReleased.connect(self.send_feed_rate_command)
+        feed_rate_layout.addWidget(self.feed_rate_slider)
+        self.feed_rate_label = QLabel('F: 1000', self)
+        self.feed_rate_label.setFixedWidth(60)
+        feed_rate_layout.addWidget(self.feed_rate_label)
+        sliders_layout.addLayout(feed_rate_layout)
+        left_panel_layout.addWidget(sliders_group)
+
+        # --- Image Conversion Group ---
+        image_convert_group = QGroupBox('Image to G-code Conversion', self)
+        image_convert_layout = QVBoxLayout(image_convert_group)
+        image_convert_layout.setSpacing(8)
+        image_convert_layout.setContentsMargins(10, 20, 10, 10)
+        
+        image_selection_layout = QHBoxLayout()
+        self.select_image_button = QPushButton('Select Image', self)
+        self.select_image_button.clicked.connect(self.select_image)
+        image_selection_layout.addWidget(self.select_image_button)
+        self.image_path_label = QLabel('No image selected.', self)
+        self.image_path_label.setWordWrap(True)
+        image_selection_layout.addWidget(self.image_path_label)
+        image_convert_layout.addLayout(image_selection_layout)
+
+        settings_layout = QGridLayout()
+        settings_layout.setSpacing(5)
+
+        settings_layout.addWidget(QLabel("Width (mm):"), 0, 0)
+        self.width_input = QLineEdit("50", self)
+        self.width_input.setValidator(QDoubleValidator(0.1, 999.0, 3))
+        settings_layout.addWidget(self.width_input, 0, 1)
+
+        settings_layout.addWidget(QLabel("Height (mm):"), 1, 0)
+        self.height_input = QLineEdit("50", self)
+        self.height_input.setValidator(QDoubleValidator(0.1, 999.0, 3))
+        settings_layout.addWidget(self.height_input, 1, 1)
+
+        settings_layout.addWidget(QLabel('Laser Threshold (0-255):'), 0, 2)
+        self.laser_threshold_input = QLineEdit(str(self.laser_threshold), self)
+        self.laser_threshold_input.setValidator(QDoubleValidator(0.0, 255.0, 0))
+        self.laser_threshold_input.editingFinished.connect(self.update_laser_threshold)
+        settings_layout.addWidget(self.laser_threshold_input, 0, 3)
+        
+        settings_layout.addWidget(QLabel('Resolution (PPM):'), 1, 2)
+        self.preview_resolution_input = QLineEdit(str(self.preview_image_resolution_ppm), self)
+        self.preview_resolution_input.setValidator(QDoubleValidator(1.0, 50.0, 0))
+        self.preview_resolution_input.editingFinished.connect(self.update_preview_resolution)
+        settings_layout.addWidget(self.preview_resolution_input, 1, 3)
+        
+        image_convert_layout.addLayout(settings_layout)
+
+        self.convert_to_gcode_button = QPushButton('Convert & Preview', self)
+        self.convert_to_gcode_button.clicked.connect(self.convert_image_to_gcode)
+        self.convert_to_gcode_button.setEnabled(False)
+        image_convert_layout.addWidget(self.convert_to_gcode_button)
+        left_panel_layout.addWidget(image_convert_group)
+
+        # --- G-code Console & GRBL Output Group ---
+        gcode_console_group = QGroupBox('G-code Console & GRBL Output', self)
+        gcode_console_layout = QVBoxLayout(gcode_console_group)
+        gcode_console_layout.setSpacing(8)
+        gcode_console_layout.setContentsMargins(10, 20, 10, 10)
+        
+        gcode_console_layout.addWidget(QLabel('G-code to Send:'))
+        self.gcode_input = QTextEdit(self)
+        self.gcode_input.setPlaceholderText("Type or paste G-code commands here / Image G-code will appear here.")
+        self.gcode_input.setMinimumHeight(100) # Ensure a minimum height for G-code input
+        gcode_console_layout.addWidget(self.gcode_input)
+        
+        self.send_gcode_button = QPushButton('Send G-code', self)
+        self.send_gcode_button.clicked.connect(self.send_gcode)
+        self.send_gcode_button.setEnabled(False)
+        gcode_console_layout.addWidget(self.send_gcode_button)
+        
+        self.grbl_output_text = QTextEdit(self)
+        self.grbl_output_text.setReadOnly(True)
+        self.grbl_output_text.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        self.grbl_output_text.setObjectName("grblOutputText")
+        self.grbl_output_text.setMinimumHeight(100) # Ensure a minimum height for GRBL output
+        gcode_console_layout.addWidget(QLabel('GRBL Output (Console):'))
+        gcode_console_layout.addWidget(self.grbl_output_text)
+        
+        left_panel_layout.addWidget(gcode_console_group)
+        left_panel_layout.addStretch(1) # Pushes content to the top within the scroll area
+
+        scroll_area.setWidget(left_panel_container)
+        # Set a fixed width for the left panel container within the scroll area
+        # This prevents it from shrinking too much, forcing scrollbar if needed
+        # left_panel_container.setMinimumWidth(350) # You might need to adjust this based on content
+        # scroll_area.setFixedWidth(380) # Or set fixed width for the scroll area if you prefer a less dynamic left panel
+
+        main_layout.addWidget(scroll_area, 1) # Occupy 1/3 of the width roughly
+
+        # --- Right Panel (G-code Preview) ---
+        right_panel_layout = QVBoxLayout()
+        right_panel_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.preview_group = QGroupBox('Laser Path Preview', self)
+        preview_layout = QVBoxLayout(self.preview_group)
+        preview_layout.setContentsMargins(10, 20, 10, 10)
+        
+        self.graphics_scene = QGraphicsScene(self)
+        self.graphics_scene.setSceneRect(0, 0, 150, 150)
+        
+        self.graphics_view = QGraphicsView(self.graphics_scene, self)
+        self.graphics_view.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.graphics_view.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self.graphics_view.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorViewCenter)
+        self.graphics_view.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        self.graphics_view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self.graphics_view.wheelEvent = self.graphics_view_wheelEvent
+        self.graphics_view.setMinimumSize(400, 400) # Minimum size for the preview area
+
+        preview_layout.addWidget(self.graphics_view)
+        right_panel_layout.addWidget(self.preview_group)
+
+        main_layout.addLayout(right_panel_layout, 2) # Occupy 2/3 of the width roughly
+        self.setLayout(main_layout)
+
+        self.update_ui_state(False)
+        self.preview_gcode("") # Draw initial empty grid
+
+    def apply_styles(self):
+        """Applies a dark, professional QSS theme to the application."""
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #2e2e2e; /* Dark background */
+                color: #e0e0e0; /* Light grey text */
+                font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+                font-size: 13px; /* Slightly smaller base font */
+            }
+
+            QGroupBox {
+                background-color: #3b3b3b; /* Slightly lighter group background */
+                border: 1px solid #505050;
+                border-radius: 6px; /* Slightly more rounded corners */
+                margin-top: 1.5ex; /* Space for title */
+                font-weight: bold;
+                color: #f0f0f0; /* Group title color */
+                padding: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                padding: 0 5px;
+                color: #a0a0a0; /* Subtler title color */
+                font-size: 14px;
+                font-weight: bold;
+            }
+
+            QLabel {
+                color: #d0d0d0;
+            }
+            QLabel#statusLabel { /* Specific style for status label */
+                font-weight: bold;
+                color: #cccccc; /* Default neutral color */
+            }
+            QLabel#posLabel { /* Specific style for position label */
+                font-family: 'Consolas', 'Courier New', monospace; /* Monospaced for coordinates */
+                font-size: 13px;
+                color: #90ee90; /* Light green for position */
+            }
+
+            QPushButton {
+                background-color: #555555;
+                color: #ffffff;
+                border: 1px solid #777777;
+                border-radius: 4px;
+                padding: 7px 14px; /* Slightly more padding */
+                min-height: 30px; /* Consistent height */
+                font-size: 13px;
+                outline: none; /* Remove focus outline */
+            }
+            QPushButton:hover {
+                background-color: #666666;
+                border-color: #999999;
+            }
+            QPushButton:pressed {
+                background-color: #444444;
+                border-color: #aaaaaa;
+            }
+            QPushButton:disabled {
+                background-color: #383838;
+                color: #777777;
+                border-color: #555555;
+            }
+
+            QComboBox {
+                background-color: #3a3a3a;
+                color: #e0e0e0;
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding: 5px; /* More padding */
+                selection-background-color: #007acc; /* Highlight for selected item */
+                min-height: 30px; /* Consistent height */
+            }
+            QComboBox::drop-down {
+                border: 0px; /* No border for the arrow button */
+                width: 20px; /* Make dropdown arrow area larger */
+                subcontrol-origin: padding;
+                subcontrol-position: center right;
+            }
+            QComboBox::down-arrow {
+                image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDE2IDE2Ij48cGF0aCBmaWxsPSIjRTBFMEUwIiBkPSJNNi42IDExLjZMMyAxMmwxLTIuNmEzIDMgMCAwIDAgMCAuNiAxIDEgMCAwIDAgLjguMiA2IDYgMCAwIDEtNiAxMC42IDYgNiAwIDAgMS02IDZhMSAxIDAgMCAwLS44LS4xIDMgMyAwIDAgMC0uMS0uNyAzIDMgMCAwIDAgLjctLjEgMSAxIDAgMCAwLS41LS43djExLjZ6IiB0cmFuc2Zvcm09InJvdGF0ZSgxODBIDEg4IDgpIiAvPjwvc3ZnPg==); /* Simple white down arrow */
+                width: 12px;
+                height: 12px;
+            }
+            QComboBox QAbstractItemView { /* Styling for dropdown list items */
+                background-color: #3a3a3a;
+                color: #e0e0e0;
+                border: 1px solid #555;
+                selection-background-color: #007acc;
+            }
+
+            QLineEdit {
+                background-color: #3a3a3a;
+                color: #e0e0e0;
+                border: 1px solid #555;
+                border-radius: 3px;
+                padding: 6px; /* More padding */
+                min-height: 30px; /* Consistent height */
+            }
+            QLineEdit:focus {
+                border: 1px solid #0099ff; /* Brighter highlight on focus */
+                background-color: #424242; /* Slightly brighter when focused */
+            }
+
+            QTextEdit {
+                background-color: #222222; /* Even darker for console/code */
+                color: #f0f0f0; /* Default text color for general input */
+                border: 1px solid #444;
+                border-radius: 3px;
+                padding: 8px; /* More padding */
+                font-family: 'Consolas', 'Fira Code', 'Roboto Mono', monospace; /* Monospaced font for code */
+                font-size: 13px;
+            }
+            QTextEdit::placeholder {
+                color: #888888;
+            }
+            QTextEdit#grblOutputText { /* Specific style for GRBL output */
+                color: #00e6e6; /* Cyan for GRBL responses */
+            }
+
+            QSlider::groove:horizontal {
+                border: 1px solid #555;
+                height: 6px; /* thinner groove */
+                background: #4a4a4a;
+                margin: 2px 0;
+                border-radius: 3px;
+            }
+
+            QSlider::handle:horizontal {
+                background: #0099ff; /* Professional blue accent color */
+                border: 1px solid #006bb3;
+                width: 16px; /* smaller handle */
+                margin: -5px 0; 
+                border-radius: 8px;
+            }
+            QSlider::handle:horizontal:hover {
+                background: #00b3ff;
+            }
+            QSlider::add-page:horizontal {
+                background: #555;
+                border-radius: 3px;
+            }
+            QSlider::sub-page:horizontal {
+                background: #007acc; /* Slightly darker blue for filled part */
+                border-radius: 3px;
+            }
+            QSlider::tick-mark {
+                background: #777;
+                width: 1px;
+                height: 6px; /* vertical tick marks */
+                margin-top: 0px; /* center vertical axis */
+            }
+
+            QGraphicsView {
+                background-color: #1c1c1c; /* Very dark background for the drawing area */
+                border: 1px solid #444;
+                border-radius: 5px;
+            }
+            
+            QScrollArea {
+                border: none; /* No border for the scroll area itself */
+            }
+            QScrollArea > QWidget > QWidget { /* Targeting the inner widget of scroll area */
+                background-color: #2e2e2e; /* Match main background */
+            }
+            
+            /* Scrollbar styling for a cleaner look */
+            QScrollBar:vertical {
+                border: 1px solid #3a3a3a;
+                background: #2a2a2a;
+                width: 12px;
+                margin: 0px 0px 0px 0px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #505050;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #606060;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                background: none;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+
+        """)
+        
+    def update_ui_state(self, connected):
+        """Updates the enabled/disabled state of UI elements based on connection status."""
+        is_image_selected = (self.image_path is not None)
+
+        self.send_gcode_button.setEnabled(connected)
+        
+        jogging_allowed = connected and (self.grbl_status in ["Idle", "Jog"]) 
+        self.jog_btn_x_minus.setEnabled(jogging_allowed)
+        self.jog_btn_x_plus.setEnabled(jogging_allowed)
+        self.jog_btn_y_minus.setEnabled(jogging_allowed)
+        self.jog_btn_y_plus.setEnabled(jogging_allowed)
+        self.jog_btn_z_minus.setEnabled(jogging_allowed)
+        self.jog_btn_z_plus.setEnabled(jogging_allowed)
+        self.jog_btn_home.setEnabled(connected)
+        self.jog_btn_set_origin.setEnabled(connected)
+        
+        self.jog_btn_unlock.setEnabled(connected)
+        self.jog_btn_soft_reset.setEnabled(connected)
+
+        self.laser_power_slider.setEnabled(connected)
+        self.feed_rate_slider.setEnabled(connected)
+        self.jog_step_input.setEnabled(connected)
+        self.laser_threshold_input.setEnabled(connected)
+        self.preview_resolution_input.setEnabled(connected)
+        
+        self.convert_to_gcode_button.setEnabled(connected and is_image_selected)
+        
+        if connected:
+            self.connect_button.setText('Disconnect')
+            self.status_label.setStyleSheet("font-weight: bold; color: #90ee90;")
+        else:
+            self.connect_button.setText('Connect')
+            self.status_label.setStyleSheet("font-weight: bold; color: #ff6347;")
+
+    def populate_serial_ports(self):
+        """Populates the QComboBox with available serial ports."""
+        self.port_combo.clear()
+        available_ports = QSerialPortInfo.availablePorts()
+        if not available_ports:
+            self.port_combo.addItem("No ports found")
+            self.connect_button.setEnabled(False)
+            self.update_ui_state(False)
+        else:
+            for port in available_ports:
+                self.port_combo.addItem(f"{port.portName()} ({port.description()})", port.systemLocation())
+            self.connect_button.setEnabled(True)
+            self.update_ui_state(False)
+
+    def toggle_connection(self):
+        """Toggles the serial port connection."""
+        if self.serial_port.isOpen():
+            self.disconnect_serial()
+        else:
+            self.connect_serial()
+
+    def connect_serial(self):
+        """Attempts to connect to the selected serial port."""
+        selected_port_path = self.port_combo.currentData()
+        if not selected_port_path:
+            QMessageBox.warning(self, "Connection Error", "Please select a serial port.")
+            return
+
+        self.serial_port.setPortName(selected_port_path)
+        self.serial_port.setBaudRate(115200)
+        self.serial_port.setDataBits(QSerialPort.DataBits.Data8)
+        self.serial_port.setParity(QSerialPort.Parity.NoParity)
+        self.serial_port.setStopBits(QSerialPort.StopBits.OneStop)
+        self.serial_port.setFlowControl(QSerialPort.FlowControl.NoFlowControl)
+
+        if self.serial_port.open(QIODevice.OpenModeFlag.ReadWrite):
+            self.status_label.setText(f'Status: Attempting to connect to: {self.port_combo.currentText()}...')
+            self.connect_button.setEnabled(False)
+            self.grbl_response_buffer = ""
+            self.serial_port.readyRead.connect(self._read_grbl_detection_data)
+            self.serial_port.write(b'\n')
+            self.grbl_detect_timer.start(2000)
+        else:
+            self.status_label.setText(f'Status: Connection failed: {self.serial_port.errorString()}')
+            self.connect_button.setEnabled(True)
+            self.update_ui_state(False)
+            QMessageBox.critical(self, "Connection Error", f"Failed to connect to {self.port_combo.currentText()}:\n{self.serial_port.errorString()}")
+
+    def _read_grbl_detection_data(self):
+        """Reads data specifically for GRBL detection during connection."""
+        while self.serial_port.bytesAvailable():
+            data = self.serial_port.readAll().data().decode('utf-8', errors='ignore')
+            self.grbl_response_buffer += data
+            self.grbl_output_text.append(f"<span style='color: #88dd88;'>[INFO] Waiting for GRBL: {data.strip()}</span>")
+
+    def _check_grbl_response(self):
+        """Checks the buffered response for GRBL signature after timer expires."""
+        try:
+            self.serial_port.readyRead.disconnect(self._read_grbl_detection_data)
+        except TypeError:
+            pass
+        
+        if "Grbl" in self.grbl_response_buffer:
+            grbl_version_match = re.search(r"Grbl ([0-9.]+)", self.grbl_response_buffer)
+            grbl_version = grbl_version_match.group(1) if grbl_version_match else "N/A"
+            self.status_label.setText(f'Status: Connected to: {self.serial_port.portName()} (GRBL v{grbl_version})')
+            self.connect_button.setText('Disconnect')
+            self.update_ui_state(True)
+            self.serial_port.readyRead.connect(self.read_data)
+            self.status_timer.start(200)
+            QMessageBox.information(self, "Connection Successful", "GRBL Controller detected and connected successfully!")
+            self.send_command("$$")
+            self.send_command("$G")
+        else:
+            self.serial_port.close()
+            self.status_label.setText(f'Status: Disconnected (GRBL not found)')
+            self.connect_button.setText('Connect')
+            self.connect_button.setEnabled(True)
+            self.update_ui_state(False)
+            QMessageBox.critical(self, "Detection Failed", "No GRBL Controller detected on this port. Please check the port or GRBL power supply.")
+
+    def disconnect_serial(self):
+        """Disconnects from the serial port."""
+        if self.serial_port.isOpen():
+            self.serial_port.close()
+            self.status_label.setText('Status: Disconnected')
+            self.connect_button.setText('Connect')
+            self.update_ui_state(False)
+            self.status_timer.stop()
+            self.gcode_send_timer.stop()
+            self.gcode_to_send_queue = []
+            try:
+                self.serial_port.readyRead.disconnect(self.read_data)
+            except TypeError:
+                pass 
+            try:
+                self.serial_port.readyRead.disconnect(self._read_grbl_detection_data)
+            except TypeError:
+                pass 
+            self.grbl_detect_timer.stop()
+            QMessageBox.information(self, "Disconnected", "Connection terminated.")
+
+    def read_data(self):
+        """
+        Reads data from the serial port, displays it, parses GRBL status,
+        and triggers the sending of the next G-code command if 'ok' or 'error' is received.
+        """
+        while self.serial_port.bytesAvailable():
+            data = self.serial_port.readAll().data().decode('utf-8', errors='ignore').strip()
+            
+            if data.startswith('<'):
+                self.grbl_output_text.append(f"<span style='color: #00ffff;'>GRBL Status: {data}</span>")
+                self.parse_grbl_status(data)
+            elif data.startswith('ok'):
+                self.grbl_output_text.append(f"<span style='color: #00ff00;'>GRBL: {data}</span>")
+                if not self.gcode_send_timer.isActive() and self.gcode_to_send_queue:
+                    self.gcode_send_timer.start(5)
+            elif data.startswith('error'):
+                self.grbl_output_text.append(f"<span style='color: red;'>GRBL Error: {data}</span>")
+                self.gcode_send_timer.stop()
+                self.gcode_to_send_queue.clear()
+                QMessageBox.critical(self, "GRBL Error", f"GRBL reported an error: {data}\nG-code sending aborted.")
+            else:
+                self.grbl_output_text.append(f"GRBL: {data}")
+            
+            self.grbl_output_text.verticalScrollBar().setValue(self.grbl_output_text.verticalScrollBar().maximum())
+            
+    def send_command(self, command):
+        """Sends a single command to GRBL, ensuring it's written."""
+        if not self.serial_port.isOpen():
+            QMessageBox.warning(self, "Error", "Not connected to Arduino. Please connect first.")
+            return
+        
+        command_bytes = (command + '\n').encode('utf-8')
+        bytes_written = self.serial_port.write(command_bytes)
+        
+        if not self.serial_port.waitForBytesWritten(100):
+            self.grbl_output_text.append(f"<span style='color: red;'>Error: Failed to send '{command}'</span>")
+            return
+        
+        self.grbl_output_text.append(f"<span style='color: #ffff00;'>Sent: {command}</span>")
+        
+
+    def send_gcode(self):
+        """
+        Prepares the G-code command queue and starts sending the first command.
+        """
+        gcode_commands_raw = self.gcode_input.toPlainText().split('\n')
+        
+        self.gcode_to_send_queue = [cmd.strip() for cmd in gcode_commands_raw if cmd.strip()]
+        
+        if not self.gcode_to_send_queue:
+            QMessageBox.information(self, "Sending", "No valid G-code commands found to send.")
+            return
+
+        self.gcode_input.clear()
+
+        self._send_next_gcode_command() 
+
+    def _send_next_gcode_command(self):
+        """
+        Sends the next G-code command from the queue. This method is called
+        when GRBL responds with 'ok' or 'error' to the previous command.
+        """
+        if self.gcode_to_send_queue:
+            next_command = self.gcode_to_send_queue.pop(0)
+            self.send_command(next_command)
+        else:
+            self.gcode_send_timer.stop()
+            QMessageBox.information(self, "Sending Complete", "Finished sending all G-code commands.")
+
+
+    def request_grbl_status(self):
+        """Sends '?' to GRBL to request a status report."""
+        if self.serial_port.isOpen():
+            self.serial_port.write(b'?')
+
+    def parse_grbl_status(self, data):
+        """Parses the GRBL status report (e.g., <Idle|WPos:0.000,0.000,0.000|FS:0,0|Ov:100,100,100>)
+           and updates the GUI.
+        """
+        if data.startswith('<') and data.endswith('>'):
+            try:
+                parts = data.strip('<>').split('|')
+                
+                self.grbl_status = parts[0].split(':')[0]
+                self.status_label.setText(f'Status: {self.grbl_status}')
+                
+                self.update_ui_state(self.serial_port.isOpen())
+
+
+                for part in parts:
+                    if part.startswith('WPos:'):
+                        coords = part.replace('WPos:', '').split(',')
+                        self.current_x = float(coords[0])
+                        self.current_y = float(coords[1])
+                        self.current_z = float(coords[2])
+                        self.pos_label.setText(f'Position (WPos): X: {self.current_x:.3f} Y: {self.current_y:.3f} Z: {self.current_z:.3f}')
+
+            except Exception as e:
+                print(f"Error parsing GRBL status: {e}")
+                pass
+
+    def update_jog_step(self):
+        """Updates the jogging step from the input field."""
+        try:
+            new_step = float(self.jog_step_input.text())
+            if new_step >= 0.01:
+                self.jog_step = new_step
+            else:
+                QMessageBox.warning(self, "Input Error", "Jog step must be at least 0.01mm.")
+                self.jog_step_input.setText(str(self.jog_step))
+        except ValueError:
+            QMessageBox.warning(self, "Input Error", "Please enter a valid number for the jog step.")
+            self.jog_step_input.setText(str(self.jog_step))
+            
+    def update_laser_threshold(self):
+        """Updates the laser threshold from the input field."""
+        try:
+            new_threshold = int(self.laser_threshold_input.text())
+            if 0 <= new_threshold <= 255:
+                self.laser_threshold = new_threshold
+            else:
+                QMessageBox.warning(self, "Input Error", "Laser threshold must be between 0 and 255.")
+                self.laser_threshold_input.setText(str(self.laser_threshold))
+        except ValueError:
+            QMessageBox.warning(self, "Input Error", "Please enter a valid integer for the threshold.")
+            self.laser_threshold_input.setText(str(self.laser_threshold))
+
+    def update_preview_resolution(self):
+        """Updates the preview resolution (PPM) from the input field."""
+        try:
+            new_res = int(self.preview_resolution_input.text())
+            if 1 <= new_res <= 50:
+                self.preview_image_resolution_ppm = new_res
+                QMessageBox.information(self, "Preview Resolution", "Resolution change will apply to the next conversion.")
+            else:
+                QMessageBox.warning(self, "Input Error", "Resolution must be between 1 and 50 PPM.")
+                self.preview_resolution_input.setText(str(self.preview_image_resolution_ppm))
+        except ValueError:
+            QMessageBox.warning(self, "Input Error", "Please enter a valid integer for the resolution.")
+            self.preview_resolution_input.setText(str(self.preview_image_resolution_ppm))
+
+
+    def send_jog_command(self, x_step=0.0, y_step=0.0):
+        """Sends a jogging command for X, Y axes to GRBL."""
+        if not self.serial_port.isOpen():
+            QMessageBox.warning(self, "Error", "Not connected to Arduino.")
+            return
+
+        jog_cmd = f"$J=G21 G91 X{x_step:.3f} Y{y_step:.3f} F{self.feed_rate_slider.value()}"
+        self.send_command(jog_cmd)
+        
+    def send_jog_command_z(self, z_step=0.0):
+        """Sends a jogging command for Z axis to GRBL."""
+        if not self.serial_port.isOpen():
+            QMessageBox.warning(self, "Error", "Not connected to Arduino.")
+            return
+
+        jog_cmd = f"$J=G21 G91 Z{z_step:.3f} F{self.feed_rate_slider.value()}"
+        self.send_command(jog_cmd)
+
+    def set_origin(self):
+        """Sets the current position as the work coordinate origin (0,0,0)."""
+        self.send_command("G10 L20 P1 X0 Y0 Z0")
+        QMessageBox.information(self, "Set Origin", "Current position set as (0,0,0) for Work Coordinates (WPos).")
+
+    def update_laser_power_label(self, value):
+        """Updates only the QLabel for laser power."""
+        self.laser_power_label.setText(f'S: {value}')
+
+    def send_laser_power_command(self):
+        """Sends the S command to GRBL when the slider is released."""
+        value = self.laser_power_slider.value()
+        self.send_command(f"M4 S{value}")
+
+    def update_feed_rate_label(self, value):
+        """Updates only the QLabel for feed rate."""
+        self.feed_rate_label.setText(f'F: {value}')
+
+    def send_feed_rate_command(self):
+        """Sends the F command to GRBL when the slider is released."""
+        pass
+
+    def select_image(self):
+        """
+        Opens a file dialog for image selection and automatically updates
+        width/height dimensions based on resolution.
+        """
+        file_dialog = QFileDialog(self)
+        file_dialog.setNameFilter("Images (*.png *.jpg *.jpeg *.bmp *.gif)")
+        if file_dialog.exec():
+            selected_files = file_dialog.selectedFiles()
+            if selected_files:
+                self.image_path = selected_files[0]
+                self.image_path_label.setText(f'Selected: {self.image_path.split("/")[-1]}')
+                self.update_ui_state(self.serial_port.isOpen())
+
+                try:
+                    img = Image.open(self.image_path)
+                    img_width_pixels, img_height_pixels = img.size
+
+                    suggested_pixels_per_mm = self.preview_image_resolution_ppm 
+
+                    width_mm = img_width_pixels / suggested_pixels_per_mm
+                    height_mm = img_height_pixels / suggested_pixels_per_mm
+
+                    self.width_input.setText(f"{width_mm:.3f}")
+                    self.height_input.setText(f"{height_mm:.3f}")
+
+                except Exception as e:
+                    QMessageBox.warning(self, "Image Error", f"Could not read image dimensions: {e}")
+                    self.width_input.setText("50")
+                    self.height_input.setText("50")
+            else:
+                self.image_path = None
+                self.image_path_label.setText('No image selected.')
+                self.update_ui_state(self.serial_port.isOpen())
+                self.width_input.setText("50")
+                self.height_input.setText("50")
+
+    def convert_image_to_gcode(self):
+        """Converts the selected image to G-code and displays it in the QTextEdit and viewer."""
+        if not self.image_path:
+            QMessageBox.warning(self, "Error", "Please select an image first.")
+            return
+
+        try:
+            target_width_mm = float(self.width_input.text())
+            target_height_mm = float(self.height_input.text())
+            if target_width_mm <= 0 or target_height_mm <= 0:
+                raise ValueError("Width and Height must be positive numbers.")
+        except ValueError:
+            QMessageBox.critical(self, "Error", "Please enter valid numbers for Width and Height.")
+            return
+
+        try:
+            img = Image.open(self.image_path).convert('L')
+            
+            output_resolution_pixels_per_mm = self.preview_image_resolution_ppm
+            
+            output_img_width_pixels = int(target_width_mm * output_resolution_pixels_per_mm)
+            output_img_height_pixels = int(target_height_mm * output_resolution_pixels_per_mm)
+
+            mm_per_pixel_x = target_width_mm / output_img_width_pixels
+            mm_per_pixel_y = target_height_mm / output_img_height_pixels
+
+            img = img.resize((output_img_width_pixels, output_img_height_pixels), Image.Resampling.LANCZOS)
+            pixels = img.load()
+
+            gcode_commands = []
+            
+            gcode_commands.append("G21")
+            gcode_commands.append("G90")
+            gcode_commands.append("G17")
+            gcode_commands.append("G94")
+            gcode_commands.append("M05 S0")
+            gcode_commands.append("G00 X0 Y0")
+            
+            gcode_commands.append(f"M4 S0") 
+
+            max_laser_power = 1000
+            jog_speed_for_travel = 5000
+            engrave_speed = self.feed_rate_slider.value()
+
+            current_laser_on = False
+
+            for y_pixel in range(output_img_height_pixels):
+                current_y_mm = y_pixel * mm_per_pixel_y
+                
+                if y_pixel % 2 == 0:
+                    x_pixel_start = 0
+                    x_pixel_end = output_img_width_pixels
+                    x_pixel_step = 1
+                else:
+                    x_pixel_start = output_img_width_pixels - 1
+                    x_pixel_end = -1
+                    x_pixel_step = -1
+
+                start_x_mm = x_pixel_start * mm_per_pixel_x
+                
+                if current_laser_on:
+                    gcode_commands.append("M05")
+                    current_laser_on = False
+                
+                gcode_commands.append(f"G00 X{start_x_mm:.3f} Y{current_y_mm:.3f} F{jog_speed_for_travel}")
+                
+                for x_pixel in range(x_pixel_start, x_pixel_end, x_pixel_step):
+                    current_x_mm = x_pixel * mm_per_pixel_x
+                    pixel_intensity = pixels[x_pixel, y_pixel]
+                    
+                    if pixel_intensity < self.laser_threshold:
+                        laser_power = int( (255 - pixel_intensity) / 255 * max_laser_power )
+                        if laser_power < 10: 
+                            laser_power = 10 
+                        
+                        if not current_laser_on:
+                            gcode_commands.append(f"M4 S{laser_power} F{engrave_speed}")
+                            current_laser_on = True
+                        else:
+                            last_command = gcode_commands[-1]
+                            if not (f"S{laser_power}" in last_command and "M4" in last_command and "X" not in last_command and "Y" not in last_command):
+                                gcode_commands.append(f"M4 S{laser_power}")
+                        
+                        gcode_commands.append(f"G01 X{current_x_mm:.3f} Y{current_y_mm:.3f}") 
+                    else:
+                        if current_laser_on:
+                            gcode_commands.append("M05")
+                            current_laser_on = False
+                        gcode_commands.append(f"G00 X{current_x_mm:.3f} Y{current_y_mm:.3f} F{jog_speed_for_travel}")
+
+                if current_laser_on:
+                    gcode_commands.append("M05")
+                    current_laser_on = False
+
+            gcode_commands.append("M05 S0")
+            gcode_commands.append("G00 X0 Y0")
+            
+            generated_gcode = '\n'.join(gcode_commands)
+            self.gcode_input.setPlainText(generated_gcode)
+            QMessageBox.information(self, "Conversion Complete", "Image successfully converted to G-code! Displayed in G-code field.")
+            
+            self.preview_gcode(generated_gcode)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Conversion Error", f"An error occurred during conversion: {e}")
+            self.gcode_input.clear()
+
+    def preview_gcode(self, gcode_text):
+        """Draws the G-code preview in the QGraphicsView with optimized performance."""
+        self.graphics_scene.clear()
+
+        try:
+            width_mm = float(self.width_input.text())
+            height_mm = float(self.height_input.text())
+            if width_mm <= 0: width_mm = 150
+            if height_mm <= 0: height_mm = 150
+
+            self.graphics_scene.setSceneRect(0, 0, width_mm, height_mm)
+            self.graphics_view.fitInView(self.graphics_scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+        except ValueError:
+            self.graphics_scene.setSceneRect(0, 0, 150, 150)
+            self.graphics_view.fitInView(self.graphics_scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
+            width_mm = 150
+            height_mm = 150
+        
+        self.draw_grid()
+
+        if self.image_path:
+            try:
+                original_img = Image.open(self.image_path)
+                
+                img_width_pixels_for_preview = int(width_mm * self.preview_image_resolution_ppm)
+                img_height_pixels_for_preview = int(height_mm * self.preview_image_resolution_ppm)
+
+                resized_img = original_img.resize(
+                    (img_width_pixels_for_preview, img_height_pixels_for_preview),
+                    Image.Resampling.LANCZOS
+                )
+                
+                qim = ImageQt.ImageQt(resized_img.convert("RGBA"))
+                pixmap = QPixmap.fromImage(qim)
+                
+                pixmap_item = self.graphics_scene.addPixmap(pixmap)
+                
+                transform = QTransform()
+                transform.scale(width_mm / resized_img.width, height_mm / resized_img.height)
+                pixmap_item.setTransform(transform)
+                pixmap_item.setPos(0, 0)
+                
+                pixmap_item.setZValue(-1)
+
+            except Exception as e:
+                print(f"Error loading/previewing image: {e}")
+        
+        current_x, current_y = 0.0, 0.0
+        
+        move_paths = QPainterPath()
+        engrave_path = QPainterPath()
+
+        gcode_lines = gcode_text.split('\n')
+        
+        laser_active = False 
+        
+        for line in gcode_lines:
+            line = line.strip().upper()
+
+            if line.startswith('M3') or line.startswith('M4'):
+                laser_active = True
+            elif line.startswith('M5'):
+                laser_active = False
+
+            x_match = re.search(r'X([-+]?\d*\.?\d+)', line)
+            y_match = re.search(r'Y([-+]?\d*\.?\d+)', line)
+            
+            next_x = float(x_match.group(1)) if x_match else current_x
+            next_y = float(y_match.group(1)) if y_match else current_y
+
+            if line.startswith('G0') or line.startswith('G00'):
+                if move_paths.currentPosition().isNull() or move_paths.currentPosition().x() != current_x or move_paths.currentPosition().y() != current_y:
+                    move_paths.moveTo(current_x, current_y)
+                move_paths.lineTo(next_x, next_y)
+
+            elif line.startswith('G1') or line.startswith('G01'):
+                if laser_active:
+                    if engrave_path.currentPosition().isNull() or engrave_path.currentPosition().x() != current_x or engrave_path.currentPosition().y() != current_y:
+                        engrave_path.moveTo(current_x, current_y)
+                    engrave_path.lineTo(next_x, next_y)
+                else:
+                     if move_paths.currentPosition().isNull() or move_paths.currentPosition().x() != current_x or move_paths.currentPosition().y() != current_y:
+                        move_paths.moveTo(current_x, current_y)
+                     move_paths.lineTo(next_x, next_y)
+
+            current_x, current_y = next_x, next_y
+
+        move_pen = QPen(QColor(100, 100, 100, 150), 0.5)
+        move_pen.setStyle(Qt.PenStyle.DotLine)
+        if not move_paths.isEmpty():
+            self.graphics_scene.addPath(move_paths, move_pen)
+
+        if not engrave_path.isEmpty():
+            engrave_pen = QPen(QColor(0, 180, 255), 1.2)
+            self.graphics_scene.addPath(engrave_path, engrave_pen)
+
+        scene_rect = self.graphics_scene.sceneRect()
+        self.graphics_scene.addLine(0, 0, scene_rect.width(), 0, QPen(QColor(255, 50, 50, 200), 1.5))
+        self.graphics_scene.addLine(0, 0, 0, scene_rect.height(), QPen(QColor(50, 255, 50, 200), 1.5))
+        
+        font = QFont("Arial", 10)
+        font.setBold(True)
+
+        text_x_item = QGraphicsTextItem("X")
+        text_x_item.setDefaultTextColor(QColor(255, 50, 50))
+        text_x_item.setFont(font)
+        self.graphics_scene.addItem(text_x_item)
+        text_x_item.setPos(scene_rect.width() - text_x_item.boundingRect().width() - 5, -text_x_item.boundingRect().height())
+
+        text_y_item = QGraphicsTextItem("Y")
+        text_y_item.setDefaultTextColor(QColor(50, 255, 50))
+        text_y_item.setFont(font)
+        self.graphics_scene.addItem(text_y_item)
+        text_y_item.setPos(-text_y_item.boundingRect().width() - 5, scene_rect.height() - text_y_item.boundingRect().height() - 5)
+
+        origin_pen = QPen(QColor(255, 255, 0), 1.5)
+        origin_size = 5
+        self.graphics_scene.addLine(-origin_size/2, 0, origin_size/2, 0, origin_pen)
+        self.graphics_scene.addLine(0, -origin_size/2, 0, origin_size/2, origin_pen)
+
+
+    def draw_grid(self):
+        """Draws the grid on the QGraphicsScene."""
+        items_to_remove = []
+        for item in self.graphics_scene.items():
+            if isinstance(item, QGraphicsLineItem):
+                color = item.pen().color()
+                if color in [QColor(60, 60, 60, 100), QColor(80, 80, 80, 150)]:
+                    items_to_remove.append(item)
+        for item in items_to_remove:
+            self.graphics_scene.removeItem(item)
+
+        grid_pen_minor = QPen(QColor(60, 60, 60, 100), 0.3)
+        grid_pen_minor.setStyle(Qt.PenStyle.DotLine)
+        
+        grid_pen_major = QPen(QColor(80, 80, 80, 150), 0.7)
+        grid_pen_major.setStyle(Qt.PenStyle.SolidLine)
+
+        minor_grid_step = 1.0
+        major_grid_step = 10.0
+        
+        scene_rect = self.graphics_scene.sceneRect()
+        
+        if scene_rect.width() <= 0 or scene_rect.height() <= 0:
+            return
+
+        for x in range(int(scene_rect.width() / minor_grid_step) + 1):
+            current_x = x * minor_grid_step
+            pen_to_use = grid_pen_major if (abs(current_x % major_grid_step) < 0.001) else grid_pen_minor
+            self.graphics_scene.addLine(current_x, scene_rect.top(), current_x, scene_rect.bottom(), pen_to_use)
+
+        for y in range(int(scene_rect.height() / minor_grid_step) + 1):
+            current_y = y * minor_grid_step
+            pen_to_use = grid_pen_major if (abs(current_y % major_grid_step) < 0.001) else grid_pen_minor
+            self.graphics_scene.addLine(scene_rect.left(), current_y, scene_rect.right(), current_y, pen_to_use)
+
+
+    def graphics_view_wheelEvent(self, event):
+        """Handles zooming with the mouse wheel."""
+        zoom_factor = 1.15
+        if event.angleDelta().y() > 0:
+            self.graphics_view.scale(zoom_factor, zoom_factor)
+        else:
+            self.graphics_view.scale(1 / zoom_factor, 1 / zoom_factor)
+        event.accept()
+
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    ex = LaserControllerApp()
+    ex.show()
+    sys.exit(app.exec())
