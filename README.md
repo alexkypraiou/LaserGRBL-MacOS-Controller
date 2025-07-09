@@ -1,7 +1,3 @@
-Got it. You want the GitHub documentation, but focused only on running the Python script directly, not building a standalone app. This means emphasizing the Python environment setup.
-
-Here's the revised README.md content focusing on running the Python script directly:
-
 Laser GRBL Controller for macOS
 This project provides a desktop application for macOS to control GRBL-compatible CNC machines and laser engravers. Built with Python and PyQt6, it offers a user-friendly interface for serial communication, G-code sending, jogging, and even converting images to G-code for engraving.
 
