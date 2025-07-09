@@ -96,12 +96,12 @@ source venv/bin/activate
 You will notice (venv) appear at the beginning of your Terminal prompt, indicating that the virtual environment is active.
 
 Step 5: Install Dependencies
-With the virtual environment activated, install the required Python packages:
+With the virtual environment activated, install the required Python packages using the requirements file:
 
 
 
-pip install PyQt6 PyQt6-Qt PySerial Pillow
-This command will download and install PyQt6, PySerial, and Pillow (PIL) into your virtual environment.
+pip install -r requirements.txt
+This command will download and install all required dependencies (PyQt6, PySerial, and Pillow) into your virtual environment.
 
 Step 6: Run the Application
 Finally, execute the main Python script to launch the application:
@@ -122,6 +122,8 @@ We welcome contributions! If you have suggestions, bug reports, or want to contr
 Open an issue on GitHub.
 
 Fork the repository and submit a pull request.
+
+For detailed contribution guidelines, please see the [CONTRIBUTING.md](CONTRIBUTING.md) file.
 
 # License
 This project is licensed under the MIT License - see the LICENSE file for details.
