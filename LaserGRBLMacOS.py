@@ -17,7 +17,31 @@ from PyQt6.QtGui import (
 from PIL import Image, ImageQt # type: ignore
 
 class LaserControllerApp(QWidget):
+    """
+    Main application class for the Laser GRBL Controller.
+    
+    This class provides a PyQt6-based GUI application for controlling GRBL-compatible
+    CNC machines and laser engravers. It supports serial communication, G-code sending,
+    jogging controls, image-to-G-code conversion, and real-time status monitoring.
+    
+    Attributes:
+        serial_port (QSerialPort): Serial port connection to the GRBL device
+        image_path (str): Path to the currently selected image file
+        current_x, current_y, current_z (float): Current machine coordinates
+        grbl_status (str): Current GRBL status string
+        jog_step (float): Step size for jogging movements in mm
+        preview_image_resolution_ppm (int): Pixels per millimeter for image conversion
+        laser_threshold (int): Pixel intensity threshold (0-255) for laser activation
+        gcode_to_send_queue (list): Queue of G-code commands to send sequentially
+    """
+    
     def __init__(self):
+        """
+        Initialize the LaserControllerApp.
+        
+        Sets up the main window, initializes all instance variables, creates timers
+        for GRBL communication, and builds the user interface.
+        """
         super().__init__()
         self.serial_port = QSerialPort()
         self.image_path = None
@@ -55,6 +79,13 @@ class LaserControllerApp(QWidget):
         self.populate_serial_ports()
 
     def initUI(self):
+        """
+        Initialize and set up the user interface.
+        
+        Creates the main window layout with left control panel (serial connection,
+        GRBL status, jogging controls, laser settings, image conversion) and right
+        panel (G-code preview). Uses a scrollable design for smaller screens.
+        """
         self.setWindowTitle('Laser GRBL Controller - Precision')
         self.setMinimumSize(1000, 700)
         self.setGeometry(100, 100, 1400, 900)
@@ -636,31 +667,64 @@ class LaserControllerApp(QWidget):
             self.connect_serial()
 
     def connect_serial(self):
-        """Attempts to connect to the selected serial port."""
+        """
+        Attempts to connect to the selected serial port.
+        
+        Configures the serial port with GRBL-standard settings (115200 baud, 8N1),
+        attempts to open the connection, and initiates GRBL detection by sending
+        a wake-up command. Provides user feedback through status updates and
+        error dialogs.
+        
+        Returns:
+            None
+            
+        Raises:
+            No exceptions are raised; errors are handled gracefully with user notifications.
+        """
         selected_port_path = self.port_combo.currentData()
         if not selected_port_path:
             QMessageBox.warning(self, "Connection Error", "Please select a serial port.")
             return
 
-        self.serial_port.setPortName(selected_port_path)
-        self.serial_port.setBaudRate(115200)
-        self.serial_port.setDataBits(QSerialPort.DataBits.Data8)
-        self.serial_port.setParity(QSerialPort.Parity.NoParity)
-        self.serial_port.setStopBits(QSerialPort.StopBits.OneStop)
-        self.serial_port.setFlowControl(QSerialPort.FlowControl.NoFlowControl)
+        # Configure serial port with GRBL standard settings
+        try:
+            self.serial_port.setPortName(selected_port_path)
+            self.serial_port.setBaudRate(115200)
+            self.serial_port.setDataBits(QSerialPort.DataBits.Data8)
+            self.serial_port.setParity(QSerialPort.Parity.NoParity)
+            self.serial_port.setStopBits(QSerialPort.StopBits.OneStop)
+            self.serial_port.setFlowControl(QSerialPort.FlowControl.NoFlowControl)
 
-        if self.serial_port.open(QIODevice.OpenModeFlag.ReadWrite):
-            self.status_label.setText(f'Status: Attempting to connect to: {self.port_combo.currentText()}...')
-            self.connect_button.setEnabled(False)
-            self.grbl_response_buffer = ""
-            self.serial_port.readyRead.connect(self._read_grbl_detection_data)
-            self.serial_port.write(b'\n') # Send newline to wake up GRBL
-            self.grbl_detect_timer.start(2000) # Wait 2 seconds for GRBL response
-        else:
-            self.status_label.setText(f'Status: Connection failed: {self.serial_port.errorString()}')
+            if self.serial_port.open(QIODevice.OpenModeFlag.ReadWrite):
+                self.status_label.setText(f'Status: Attempting to connect to: {self.port_combo.currentText()}...')
+                self.connect_button.setEnabled(False)
+                self.grbl_response_buffer = ""
+                self.serial_port.readyRead.connect(self._read_grbl_detection_data)
+                self.serial_port.write(b'\n')  # Send newline to wake up GRBL
+                self.grbl_detect_timer.start(2000)  # Wait 2 seconds for GRBL response
+            else:
+                error_msg = self.serial_port.errorString()
+                self.status_label.setText(f'Status: Connection failed: {error_msg}')
+                self.connect_button.setEnabled(True)
+                self.update_ui_state(False)
+                
+                # Provide more specific error messages based on common issues
+                if "Permission denied" in error_msg or "Access denied" in error_msg:
+                    error_detail = f"Permission denied. Try:\n• Closing other applications using this port\n• Running as administrator\n• Checking if the device is properly connected"
+                elif "Device not found" in error_msg or "No such file" in error_msg:
+                    error_detail = f"Device not found. Please:\n• Check if the device is connected\n• Verify the correct port is selected\n• Try refreshing the port list"
+                else:
+                    error_detail = f"Failed to connect to {self.port_combo.currentText()}:\n{error_msg}"
+                    
+                QMessageBox.critical(self, "Connection Error", error_detail)
+                
+        except Exception as e:
+            # Handle any unexpected exceptions during port configuration
+            error_msg = f"Unexpected error during connection setup: {str(e)}"
+            self.status_label.setText(f'Status: Configuration error')
             self.connect_button.setEnabled(True)
             self.update_ui_state(False)
-            QMessageBox.critical(self, "Connection Error", f"Failed to connect to {self.port_combo.currentText()}:\n{self.serial_port.errorString()}")
+            QMessageBox.critical(self, "Connection Error", error_msg)
 
     def _read_grbl_detection_data(self):
         """Reads data specifically for GRBL detection during connection."""
@@ -769,18 +833,52 @@ class LaserControllerApp(QWidget):
             self.grbl_output_text.verticalScrollBar().setValue(self.grbl_output_text.verticalScrollBar().maximum())
             
     def send_command(self, command):
-        """Sends a single command to GRBL, ensuring it's written."""
+        """
+        Sends a single command to GRBL via the serial connection.
+        
+        Args:
+            command (str): The G-code or GRBL command to send (without newline)
+            
+        Returns:
+            bool: True if command was sent successfully, False otherwise
+            
+        Note:
+            Commands are automatically terminated with a newline character.
+            All sent commands are logged to the output console.
+        """
         if not self.serial_port.isOpen():
             QMessageBox.warning(self, "Error", "Not connected to Arduino. Please connect first.")
-            return
+            return False
         
+        if not command or not command.strip():
+            QMessageBox.warning(self, "Error", "Cannot send empty command.")
+            return False
+        
+        # Clean and prepare the command
+        command = command.strip()
         command_b = (command + '\n').encode('utf-8')
+        
         try:
-            self.serial_port.write(command_b)
+            bytes_written = self.serial_port.write(command_b)
+            if bytes_written == -1:
+                error_msg = f"Failed to write to serial port: {self.serial_port.errorString()}"
+                self.grbl_output_text.append(f"<span style='color: red;'>[ERROR] {error_msg}</span>")
+                QMessageBox.critical(self, "Send Error", error_msg)
+                return False
+            elif bytes_written != len(command_b):
+                warning_msg = f"Partial write: {bytes_written}/{len(command_b)} bytes sent"
+                self.grbl_output_text.append(f"<span style='color: orange;'>[WARNING] {warning_msg}</span>")
+            
+            # Log successful command
             self.grbl_output_text.append(f"<span style='color: #ffff00;'>Sent: {command}</span>")
             self.grbl_output_text.verticalScrollBar().setValue(self.grbl_output_text.verticalScrollBar().maximum())
+            return True
+            
         except Exception as e:
-            QMessageBox.critical(self, "Send Error", f"Failed to send command: {e}")
+            error_msg = f"Unexpected error sending command '{command}': {str(e)}"
+            self.grbl_output_text.append(f"<span style='color: red;'>[ERROR] {error_msg}</span>")
+            QMessageBox.critical(self, "Send Error", error_msg)
+            return False
 
     def _send_next_gcode_command(self):
         """Sends the next G-code command from the queue."""
@@ -944,24 +1042,50 @@ class LaserControllerApp(QWidget):
             QMessageBox.warning(self, "Invalid Input", "Resolution must be an integer from 1 to 50.")
 
     def convert_image_to_gcode(self):
-        """Converts the selected image to G-code based on settings."""
+        """
+        Converts the selected image to G-code for laser engraving.
+        
+        This method processes a grayscale image and generates G-code commands
+        suitable for laser engraving. The conversion process:
+        1. Loads and converts the image to grayscale
+        2. Resizes to specified dimensions 
+        3. Scans pixel by pixel to generate laser movements
+        4. Creates G00 (rapid move) and G01 (laser engraving) commands
+        
+        The laser is turned on/off based on the pixel intensity threshold.
+        Darker pixels (below threshold) trigger laser activation.
+        
+        Returns:
+            None (updates the G-code console and preview)
+            
+        Raises:
+            No exceptions are raised; errors are handled with user notifications.
+        """
         if not self.image_path:
             QMessageBox.warning(self, "Error", "Please select an image first.")
             return
 
+        # Validate input dimensions
         try:
             target_width_mm = float(self.width_input.text())
             target_height_mm = float(self.height_input.text())
             if target_width_mm <= 0 or target_height_mm <= 0:
                 raise ValueError("Dimensions must be positive.")
-        except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "Please enter valid positive values for width and height (in mm).")
+            if target_width_mm > 1000 or target_height_mm > 1000:
+                raise ValueError("Dimensions too large (max 1000mm).")
+        except ValueError as e:
+            QMessageBox.warning(self, "Invalid Input", 
+                              f"Please enter valid dimensions (1-1000mm):\n{str(e)}")
             return
 
+        # Load and validate image
         try:
-            img = Image.open(self.image_path).convert('L') # Convert to grayscale
+            img = Image.open(self.image_path).convert('L')  # Convert to grayscale
+            if img.size[0] == 0 or img.size[1] == 0:
+                raise ValueError("Image has zero dimensions.")
         except Exception as e:
-            QMessageBox.critical(self, "Image Loading Error", f"Failed to load image: {e}")
+            QMessageBox.critical(self, "Image Loading Error", 
+                               f"Failed to load image '{self.image_path}':\n{str(e)}")
             return
 
         # Calculate pixels based on target mm and PPM
