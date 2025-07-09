@@ -1,7 +1,12 @@
-Laser GRBL Controller for macOS
+# Laser GRBL Controller for macOS
+
+
+
 This project provides a desktop application for macOS to control GRBL-compatible CNC machines and laser engravers. Built with Python and PyQt6, it offers a user-friendly interface for serial communication, G-code sending, jogging, and even converting images to G-code for engraving.
 
-Features
+# Features
+
+
 Serial Port Connection: Easily connect and disconnect from available serial ports.
 
 GRBL Status Monitoring: Displays real-time GRBL status (Idle, Run, Hold, etc.) and current Work Position (WPos).
