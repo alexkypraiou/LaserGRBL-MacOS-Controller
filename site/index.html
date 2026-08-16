@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#11151c">
+    <meta
+      name="description"
+      content="LaserGRBL for macOS is an open-source GRBL controller with safe job streaming, toolpath preview, and image-to-G-code."
+    >
+    <meta property="og:title" content="LaserGRBL for macOS">
+    <meta property="og:description" content="Control. Preview. Engrave. A modern open-source GRBL workspace for macOS makers.">
+    <meta property="og:image" content="assets/social-preview.png">
+    <meta property="og:type" content="website">
+    <title>LaserGRBL for macOS — Control. Preview. Engrave.</title>
+    <link rel="icon" href="assets/app-icon-1024.png">
+    <style>
+      :root {
+        color-scheme: dark;
+        --background: #0b0f15;
+        --surface: #151c25;
+        --surface-raised: #1b2430;
+        --border: #2d3a4a;
+        --text: #f7f9fc;
+        --muted: #a4b0bf;
+        --accent: #ee7134;
+        --accent-soft: #3e281e;
+        --success: #6ce5a5;
+        --blue: #71c7ff;
+        --max-width: 1160px;
+      }
+
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 80% -10%, rgba(238, 113, 52, 0.18), transparent 34rem),
+          radial-gradient(circle at 0 65%, rgba(73, 141, 181, 0.12), transparent 31rem),
+          var(--background);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      a { color: inherit; }
+      img { display: block; max-width: 100%; }
+      .container { width: min(calc(100% - 40px), var(--max-width)); margin-inline: auto; }
+
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        background: rgba(11, 15, 21, 0.82);
+        backdrop-filter: blur(18px);
+      }
+      .nav-inner { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+      .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; font-weight: 800; letter-spacing: -0.02em; }
+      .brand img { width: 42px; height: 42px; border-radius: 11px; }
+      .nav-links { display: flex; align-items: center; gap: 24px; color: var(--muted); font-size: 0.94rem; }
+      .nav-links a { text-decoration: none; }
+      .nav-links a:hover { color: var(--text); }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 48px;
+        padding: 0 20px;
+        border: 1px solid var(--border);
+        border-radius: 11px;
+        background: var(--surface-raised);
+        color: var(--text);
+        font-weight: 750;
+        text-decoration: none;
+        transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+      }
+      .button:hover { transform: translateY(-2px); border-color: #52657b; }
+      .button.primary { background: var(--accent); border-color: #ff8a51; color: white; }
+      .button.primary:hover { background: #fb7e41; }
+      .button.compact { min-height: 40px; padding-inline: 16px; }
+
+      .hero { padding: 96px 0 62px; text-align: center; }
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        padding: 7px 12px;
+        border: 1px solid #355745;
+        border-radius: 999px;
+        background: rgba(27, 63, 47, 0.45);
+        color: #a3f2c8;
+        font-size: 0.84rem;
+        font-weight: 750;
+      }
+      .eyebrow::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 16px var(--success); }
+      h1 { margin: 26px auto 18px; max-width: 920px; font-size: clamp(3rem, 8vw, 6.2rem); line-height: 0.98; letter-spacing: -0.065em; }
+      h1 span { color: var(--accent); }
+      .hero-copy { max-width: 770px; margin: 0 auto; color: var(--muted); font-size: clamp(1.05rem, 2vw, 1.3rem); }
+      .hero-actions { margin-top: 32px; display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+      .hero-note { margin-top: 16px; color: #7f8b9a; font-size: 0.87rem; }
+
+      .product-frame {
+        position: relative;
+        margin-top: 58px;
+        padding: 10px;
+        border: 1px solid #344255;
+        border-radius: 22px;
+        background: linear-gradient(145deg, #1f2936, #111720);
+        box-shadow: 0 32px 90px rgba(0, 0, 0, 0.48), 0 0 60px rgba(238, 113, 52, 0.08);
+      }
+      .product-frame::before { content: ""; position: absolute; inset: -1px; border-radius: inherit; pointer-events: none; box-shadow: inset 0 1px rgba(255, 255, 255, 0.08); }
+      .product-frame img { width: 100%; border-radius: 13px; }
+
+      section { padding: 92px 0; }
+      .section-heading { max-width: 720px; margin-bottom: 38px; }
+      .section-heading.center { margin-inline: auto; text-align: center; }
+      .kicker { color: var(--accent); font-size: 0.84rem; font-weight: 850; letter-spacing: 0.13em; text-transform: uppercase; }
+      h2 { margin: 9px 0 12px; font-size: clamp(2rem, 4vw, 3.15rem); line-height: 1.08; letter-spacing: -0.045em; }
+      .section-heading p { margin: 0; color: var(--muted); font-size: 1.08rem; }
+
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+      .card { padding: 25px; border: 1px solid var(--border); border-radius: 16px; background: linear-gradient(145deg, rgba(28, 37, 49, 0.94), rgba(18, 24, 33, 0.94)); }
+      .icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 11px; background: var(--accent-soft); color: #ff9b69; font-size: 1.25rem; font-weight: 900; }
+      .card h3 { margin: 18px 0 8px; font-size: 1.1rem; }
+      .card p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+      .workflow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; counter-reset: workflow; }
+      .step { position: relative; padding: 24px 22px; counter-increment: workflow; }
+      .step:not(:last-child)::after { content: ""; position: absolute; top: 39px; right: -12px; width: 24px; height: 1px; background: #4b5b6d; }
+      .step::before { content: counter(workflow, decimal-leading-zero); display: grid; place-items: center; width: 44px; height: 44px; border: 1px solid #4c5d71; border-radius: 50%; color: var(--blue); font-weight: 800; }
+      .step h3 { margin: 18px 0 8px; }
+      .step p { margin: 0; color: var(--muted); font-size: 0.94rem; }
+
+      .split { display: grid; grid-template-columns: 1.05fr 0.95fr; align-items: center; gap: 64px; }
+      .split > * { min-width: 0; }
+      .terminal { padding: 20px; border: 1px solid #2e3a49; border-radius: 16px; background: #080b0f; box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32); }
+      .terminal-bar { display: flex; gap: 7px; margin-bottom: 18px; }
+      .terminal-bar span { width: 10px; height: 10px; border-radius: 50%; background: #435064; }
+      .terminal-bar span:first-child { background: #e87070; }
+      .terminal-bar span:nth-child(2) { background: #e6bd5d; }
+      .terminal-bar span:last-child { background: #68cf8d; }
+      pre { margin: 0; overflow-x: auto; color: #a4edc7; font: 0.9rem/1.75 ui-monospace, SFMono-Regular, Menlo, monospace; }
+      .check-list { display: grid; gap: 13px; margin: 24px 0 0; padding: 0; list-style: none; }
+      .check-list li { position: relative; padding-left: 29px; color: var(--muted); }
+      .check-list li::before { content: "✓"; position: absolute; left: 0; color: var(--success); font-weight: 900; }
+
+      .safety { padding: 36px; border: 1px solid #6d5230; border-radius: 18px; background: linear-gradient(120deg, rgba(70, 47, 26, 0.7), rgba(35, 28, 22, 0.75)); }
+      .safety h2 { margin-top: 0; font-size: 2rem; }
+      .safety p { color: #d7c7ae; }
+
+      .cta { text-align: center; padding: 72px 30px; border: 1px solid var(--border); border-radius: 24px; background: radial-gradient(circle at 50% 0, rgba(238, 113, 52, 0.18), transparent 24rem), var(--surface); }
+      .cta p { max-width: 650px; margin: 0 auto 26px; color: var(--muted); }
+
+      footer { padding: 32px 0 50px; color: #7f8b9a; font-size: 0.9rem; }
+      .footer-inner { display: flex; justify-content: space-between; gap: 24px; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 26px; }
+      footer a { color: #aab6c4; }
+
+      @media (max-width: 900px) {
+        .grid { grid-template-columns: repeat(2, 1fr); }
+        .workflow { grid-template-columns: repeat(2, 1fr); }
+        .step:not(:last-child)::after { display: none; }
+        .split { grid-template-columns: 1fr; gap: 36px; }
+        .nav-links a:not(.button) { display: none; }
+      }
+
+      @media (max-width: 620px) {
+        .container { width: min(calc(100% - 24px), var(--max-width)); }
+        .hero { padding-top: 70px; }
+        .grid, .workflow { grid-template-columns: 1fr; }
+        .nav-links { gap: 8px; }
+        .brand span { display: none; }
+        .button.compact { padding-inline: 12px; }
+        .product-frame { margin-top: 42px; padding: 5px; border-radius: 15px; }
+        .product-frame img { border-radius: 10px; }
+        section { padding: 70px 0; }
+        .safety { padding: 26px; }
+        .footer-inner { flex-direction: column; }
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="nav" aria-label="Main navigation">
+      <div class="container nav-inner">
+        <a class="brand" href="#top">
+          <img src="assets/app-icon-1024.png" alt="">
+          <span>LaserGRBL for macOS</span>
+        </a>
+        <div class="nav-links">
+          <a href="#features">Features</a>
+          <a href="#workflow">Workflow</a>
+          <a href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller">GitHub</a>
+          <a class="button primary compact" href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/releases/latest">Download</a>
+        </div>
+      </div>
+    </nav>
+
+    <main id="top">
+      <header class="hero">
+        <div class="container">
+          <div class="eyebrow">Open source · Built for macOS</div>
+          <h1>Control. Preview. <span>Engrave.</span></h1>
+          <p class="hero-copy">
+            A focused desktop controller for GRBL-compatible laser engravers and CNC machines—with visible machine state, predictable job streaming, and no Windows dependency.
+          </p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/releases/latest">Download for macOS</a>
+            <a class="button" href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller">View source on GitHub</a>
+          </div>
+          <p class="hero-note">Alpha software · GRBL 1.1 · Python 3.11+ · Built-in no-hardware demo</p>
+          <div class="product-frame">
+            <img src="assets/app-screenshot.png" alt="LaserGRBL for macOS interface showing motion controls and a toolpath preview">
+          </div>
+        </div>
+      </header>
+
+      <section id="features">
+        <div class="container">
+          <div class="section-heading center">
+            <div class="kicker">Everything visible</div>
+            <h2>A complete GRBL workspace without the clutter</h2>
+            <p>Move from connection to preview to a running job while keeping the machine state and exact G-code close at hand.</p>
+          </div>
+          <div class="grid">
+            <article class="card">
+              <div class="icon">↔</div>
+              <h3>Reliable GRBL streaming</h3>
+              <p>Every command waits for the controller's acknowledgement before the next line is sent.</p>
+            </article>
+            <article class="card">
+              <div class="icon">◎</div>
+              <h3>Live machine control</h3>
+              <p>Discover serial ports, monitor work coordinates, jog every axis, home, unlock, and set work zero.</p>
+            </article>
+            <article class="card">
+              <div class="icon">⌁</div>
+              <h3>Toolpath preview</h3>
+              <p>Inspect rapid and engraving motion, pan and zoom, and track the live work position.</p>
+            </article>
+            <article class="card">
+              <div class="icon">▧</div>
+              <h3>Image to G-code</h3>
+              <p>Convert grayscale artwork into dynamic-power serpentine raster jobs with bounded output size.</p>
+            </article>
+            <article class="card">
+              <div class="icon">Ⅱ</div>
+              <h3>Pause and abort</h3>
+              <p>Use GRBL feed hold and cycle resume, or issue feed hold plus soft reset when a job must stop.</p>
+            </article>
+            <article class="card">
+              <div class="icon">◇</div>
+              <h3>Demo without hardware</h3>
+              <p>Explore connection, jogging, preview, console traffic, progress, and streaming with a simulated controller.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="workflow">
+        <div class="container">
+          <div class="section-heading center">
+            <div class="kicker">Straightforward workflow</div>
+            <h2>From USB cable to controlled motion</h2>
+          </div>
+          <div class="workflow">
+            <article class="step">
+              <h3>Connect</h3>
+              <p>Select the serial device and let the app verify a GRBL status or startup response.</p>
+            </article>
+            <article class="step">
+              <h3>Prepare</h3>
+              <p>Jog, home, set the work zero, and configure conservative feed and power values.</p>
+            </article>
+            <article class="step">
+              <h3>Preview</h3>
+              <p>Open G-code or generate a raster, then inspect the path and dimensions before transmission.</p>
+            </article>
+            <article class="step">
+              <h3>Run</h3>
+              <p>Stream one acknowledged line at a time while monitoring progress, state, and console output.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="container split">
+          <div>
+            <div class="kicker">Try it safely</div>
+            <h2>No controller? No problem.</h2>
+            <p style="color: var(--muted)">Demo mode simulates a connected GRBL controller and loads a small calibration frame. It is ideal for evaluating the interface, testing changes, and capturing screenshots.</p>
+            <ul class="check-list">
+              <li>No serial port is opened.</li>
+              <li>Jogging updates simulated work coordinates.</li>
+              <li>Jobs receive automatic acknowledgements.</li>
+              <li>Pause, resume, abort, preview, and console remain active.</li>
+            </ul>
+          </div>
+          <div class="terminal" aria-label="Terminal installation commands">
+            <div class="terminal-bar"><span></span><span></span><span></span></div>
+            <pre><code>git clone https://github.com/alexkypraiou/\
+  LaserGRBL-MacOS-Controller.git
+
+cd LaserGRBL-MacOS-Controller
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+
+lasergrbl-macos --demo</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="container">
+          <div class="safety">
+            <div class="kicker">Safety first</div>
+            <h2>Software is not a physical safety system.</h2>
+            <p>Use a suitable enclosure, wavelength-rated eye protection, effective exhaust ventilation, continuous supervision, and a physical emergency stop that removes laser power. Never process an unknown material.</p>
+            <a class="button" href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/blob/main/docs/SAFETY.md">Read the safety guide</a>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div class="container cta">
+          <div class="kicker">Build with us</div>
+          <h2>Made for the macOS maker community</h2>
+          <p>The project is in alpha and needs careful compatibility reports across GRBL boards, USB interfaces, Intel Macs, and Apple silicon Macs.</p>
+          <div class="hero-actions">
+            <a class="button primary" href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller">Star and contribute</a>
+            <a class="button" href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/issues">Report compatibility</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="container footer-inner">
+        <span>LaserGRBL for macOS · MIT License · Independent community project</span>
+        <span><a href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller">Source</a> · <a href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/releases">Releases</a> · <a href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/blob/main/ROADMAP.md">Roadmap</a></span>
+      </div>
+    </footer>
+  </body>
+</html>
