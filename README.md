@@ -1,139 +1,198 @@
+<p align="center">
+  <img src="assets/social-preview.png" alt="LaserGRBL for macOS — Control, preview, engrave" width="100%">
+</p>
 
-![Gemini_Generated_Image_k01nzvk01nzvk01n](https://github.com/user-attachments/assets/aab4d4f6-f896-4087-af49-d3d0447e6dbc)
+<p align="center">
+  <a href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/actions/workflows/security.yml"><img alt="Security" src="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/actions/workflows/security.yml/badge.svg"></a>
+  <a href="https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/releases"><img alt="Release" src="https://img.shields.io/github/v/release/alexkypraiou/LaserGRBL-MacOS-Controller?display_name=tag&sort=semver"></a>
+  <a href="LICENSE"><img alt="MIT License" src="https://img.shields.io/badge/license-MIT-6ce5a5"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-4c8fbd">
+  <img alt="macOS" src="https://img.shields.io/badge/platform-macOS-e56b2f">
+</p>
 
+<h1 align="center">LaserGRBL for macOS</h1>
 
+<p align="center">
+  A modern, open-source desktop controller for GRBL-compatible laser engravers and CNC machines.<br>
+  Connect your machine, jog safely, preview toolpaths, generate raster G-code, and stream jobs with acknowledgement-based flow control.
+</p>
 
-# Laser GRBL Controller for macOS
+> [!WARNING]
+> Lasers can cause permanent eye injury, fire, and hazardous fumes. Use wavelength-rated eye protection, effective ventilation, a fire-resistant enclosure, and a physical emergency stop. Never leave a running machine unattended. Read the [Safety Guide](docs/SAFETY.md) before operating hardware.
 
+## Why this project
 
+Excellent GRBL tools exist, but many macOS makers still rely on Windows-only software or generic serial consoles. LaserGRBL for macOS provides a focused native desktop workflow without hiding the machine state or the G-code being sent.
 
-This project provides a desktop application for macOS to control GRBL-compatible CNC machines and laser engravers. Built with Python and PyQt6, it offers a user-friendly interface for serial communication, G-code sending, jogging, and even converting images to G-code for engraving.
+The project is designed around three principles:
 
-# Features
+- **Visible:** machine state, work coordinates, console traffic, progress, and the path preview remain accessible.
+- **Predictable:** one G-code line is streamed at a time and the next line waits for GRBL's `ok` acknowledgement.
+- **Safety-minded:** laser testing is opt-in and hold-to-run; active jobs can be paused or aborted with GRBL real-time commands.
 
+## Features
 
-Serial Port Connection: Easily connect and disconnect from available serial ports.
+| Area | Included |
+| --- | --- |
+| Connection | Automatic serial-port discovery, GRBL detection, 115200 baud, reconnect-safe state |
+| Motion | X/Y/Z jogging, configurable step and feed rate, homing, unlock, work-zero setup |
+| Job control | Acknowledgement-driven streaming, progress and ETA, feed hold, resume, abort/reset |
+| G-code | Open, edit, save, normalize, and preview `G0`/`G1` paths in metric or inch units |
+| Artwork | Grayscale image conversion, threshold and resolution controls, serpentine raster scan |
+| Laser | Dynamic-power `M4` output, configurable maximum power, guarded hold-to-test control |
+| Diagnostics | Live GRBL console, parser-state request, machine status and work-position monitoring |
+| Evaluation | Built-in `--demo` controller for exploring the complete interface without hardware |
+| Delivery | Python package, automated tests, security scanning, and macOS `.app` release workflow |
 
-GRBL Status Monitoring: Displays real-time GRBL status (Idle, Run, Hold, etc.) and current Work Position (WPos).
+## Interface
 
-Jogging Controls: Intuitive buttons for moving the X, Y, and Z axes with configurable step sizes.
+<p align="center">
+  <img src="assets/app-screenshot.png" alt="LaserGRBL for macOS application interface in demo mode" width="100%">
+</p>
 
-Set Origin: Quickly set the current machine position as the work coordinate origin (0,0,0).
+The screenshot is captured from the built-in demo controller. No machine is required to explore the workspace.
 
-Laser & Feed Rate Control: Sliders to adjust laser power (S) and feed rate (F) on the fly.
+## Quick start
 
-Image to G-code Conversion: Convert grayscale images (PNG, JPG, BMP, GIF) into G-code paths suitable for laser engraving, with customizable resolution and laser intensity threshold.
+### Download a macOS app
 
-G-code Console: Send custom G-code commands and view GRBL's responses in a dedicated console.
+Tagged versions are built automatically by GitHub Actions. Download `LaserGRBL-for-macOS.zip` from the [latest release](https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/releases/latest), extract it, and move the app to `Applications`.
 
-G-code Path Preview: Visualizes the generated or loaded G-code paths, including laser travel (G00) and engraving (G01) moves, along with an optional image overlay.
+Current builds are ad-hoc signed, not notarized. If macOS blocks the first launch, Control-click the app, choose **Open**, and confirm that you want to run it.
 
-Dark Theme: A modern, eye-pleasing dark user interface.
+### Run from source
 
-Optimized Layout: Responsive design with a scrollable control panel for efficient use on various screen sizes.
+Requirements:
 
+- macOS 12 or newer recommended
+- Python 3.11 or newer
+- A GRBL 1.1-compatible controller for hardware operation
 
-# Screenshots
-
-
-<img width="1705" alt="Στιγμιότυπο οθόνης 2025-07-09, 21 54 46" src="https://github.com/user-attachments/assets/8661bce1-297d-43bf-89f9-9ca75576b2e6" />
-
-
-# How to Run the Application
-
-
-To run this application, you need to have Python installed on your macOS system. It's recommended to use a virtual environment to manage project dependencies.
-
-Step 1: Install Python (if you don't have it)
-macOS comes with Python pre-installed, but it might be an older version (e.g., Python 2.x). For this application, Python 3.x is required.
-
-You can install Python 3 using Homebrew, a popular package manager for macOS.
-
-Install Homebrew (if you don't have it):
-Open your Terminal (Applications/Utilities/Terminal.app) and paste the following command. Press Enter and follow the on-screen instructions.
-
-
-
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-You might be asked to enter your password. This command will also install Xcode Command Line Tools if they are not already present.
-
-Install Python 3 using Homebrew:
-Once Homebrew is installed, run this command in your Terminal:
-
-
-
-brew install python
-This will install the latest stable version of Python 3. You can verify the installation by running:
-
-
-
-python3 --version
-It should show a version like Python 3.x.x.
-
-Step 2: Clone the Repository
-Navigate to the directory where you want to save the project in your Terminal, then clone the repository:
-
-
-
-git clone https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller
+```bash
+git clone https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller.git
 cd LaserGRBL-MacOS-Controller
 
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -e .
 
-Step 3: Create a Virtual Environment (Recommended)
-It's best practice to create a virtual environment to isolate the project's dependencies from your system's global Python packages. This prevents conflicts and keeps your project clean.
+lasergrbl-macos
+```
 
+The compatibility launcher also works after installation:
 
-
-python3 -m venv venv
-This command creates a new directory named venv inside your project folder, which will contain the virtual environment.
-
-Step 4: Activate the Virtual Environment
-Before installing dependencies or running the application, you need to activate the virtual environment:
-
-
-
-source venv/bin/activate
-You will notice (venv) appear at the beginning of your Terminal prompt, indicating that the virtual environment is active.
-
-Step 5: Install Dependencies
-With the virtual environment activated, install the required Python packages:
-
-
-
-pip install PyQt6 PyQt6-Qt PySerial Pillow
-This command will download and install PyQt6, PySerial, and Pillow (PIL) into your virtual environment.
-
-Step 6: Run the Application
-Finally, execute the main Python script to launch the application:
-
-
-
+```bash
 python LaserGRBLMacOS.py
+```
 
+### Explore without hardware
 
-When you are done working with the application, you can deactivate the virtual environment by simply typing:
+```bash
+lasergrbl-macos --demo
+```
 
+Demo mode provides a simulated GRBL connection, movement updates, acknowledgements, and a sample calibration frame. It never opens a serial port.
 
+## First job
 
-deactivate
-# Contributing
-We welcome contributions! If you have suggestions, bug reports, or want to contribute code, please feel free to:
+1. Power the controller and connect it to the Mac over USB.
+2. Select the serial device and click **Connect at 115200 baud**.
+3. Confirm that the machine reaches `Idle`; unlock or home it if required by your GRBL configuration.
+4. Open existing G-code, paste commands, or open an image and generate a raster job.
+5. Inspect the path preview, dimensions, feed rate, and maximum power.
+6. Prepare ventilation, eye protection, focus, material, and the physical emergency stop.
+7. Click **Start job** and confirm the safety prompt.
+8. Use **Pause** for GRBL feed hold or **Abort** for feed hold plus soft reset.
 
-Open an issue on GitHub.
+For image engraving, configure GRBL laser mode before running a generated job:
 
-Fork the repository and submit a pull request.
+```gcode
+$32=1
+```
 
-# License
-This project is licensed under the MIT License - see the LICENSE file for details.
+Generated raster jobs use `M4` dynamic laser power, metric coordinates, absolute positioning, and a bidirectional scan. Always test a small sample at low power first.
 
+## Supported G-code preview
 
-# Please Note
+The path preview understands:
 
-You need to already have your Arduino Uno board or any board you using updated with the GRBL firmware.More info https://howtomechatronics.com/tutorials/how-to-setup-grbl-control-cnc-machine-with-arduino/ (The instructions are not mine).
-The project is open source,you can try your own stuff and make every changes you want.
+- `G0` and `G1` modal motion
+- `G20` and `G21` units
+- `G90` and `G91` positioning
+- `M3`, `M4`, `M5`, and `S` laser state
+- Inline `(...)` and `;` comments
 
+Arc interpolation (`G2`/`G3`), canned cycles, and controller-specific macros are streamed unchanged but are not currently drawn in the preview. Review those programs in a dedicated simulator before running them.
 
-# Inspiration
+## Project structure
 
-https://www.youtube.com/watch?v=td4DWtMY7SQ
-Looking this video i was looking to make the same simple CNC Machine using an Arduino Uno Board and an CNC Shield board.I am currently using both Windows and Macbook,the video shows that you can use the open source software LaserGRBL https://github.com/arkypita/LaserGRBL that is only for Windows.I was looking to make a open source software like this also for MacOS user(like me) so you don't have to switch operating system for this project.More updates soon.
+```text
+src/lasergrbl_macos/
+├── app.py          # PyQt6 interface, serial connection, and job orchestration
+├── gcode.py        # Raster generation and motion-path parsing
+├── grbl.py         # Status parser, line framing, and safe stream state machine
+└── __main__.py     # Command-line entry point and demo-mode flag
+
+tests/              # Hardware-independent protocol and G-code tests
+packaging/          # PyInstaller macOS application bundle
+scripts/            # Promotional assets, screenshot, and icon generation
+docs/               # Safety, troubleshooting, promotion, and release guides
+```
+
+## Development
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e ".[dev]"
+
+ruff format --check .
+ruff check .
+pytest
+```
+
+Run the interface against the simulator while developing:
+
+```bash
+lasergrbl-macos --demo
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and [ROADMAP.md](ROADMAP.md) for planned milestones.
+
+## Build the `.app`
+
+On macOS, install the build tools and run:
+
+```bash
+python -m pip install -e ".[build]"
+python scripts/generate_assets.py
+bash scripts/create_icns.sh
+pyinstaller --noconfirm packaging/LaserGRBL-MacOS.spec
+```
+
+The resulting bundle is written to `dist/LaserGRBL for macOS.app`. Release builds are automated by `.github/workflows/release.yml` when a `v*` tag is pushed.
+
+## Contributing
+
+Issues and pull requests are welcome. Useful contributions include additional controller testing, arc previews, vector import, localization groundwork, packaging improvements, and documentation for real machine configurations.
+
+- Review the [contribution guide](CONTRIBUTING.md).
+- Search existing [issues](https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/issues) before opening a new one.
+- Use demo mode when a change does not require physical hardware.
+- Never test laser behavior without appropriate safety systems.
+
+## Status and scope
+
+This project is in **alpha**. It should be tested carefully with your specific controller, firmware, wiring, and machine limits before production use. It is an independent community project and is not affiliated with or endorsed by the original Windows LaserGRBL project.
+
+## License
+
+Released under the [MIT License](LICENSE).
+
+## Acknowledgements
+
+- [GRBL](https://github.com/gnea/grbl) for the open machine-control firmware and protocol.
+- [LaserGRBL](https://github.com/arkypita/LaserGRBL) for demonstrating how accessible laser control software can support the maker community.
+- The open-source PyQt and Pillow communities.

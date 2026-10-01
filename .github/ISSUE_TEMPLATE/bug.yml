@@ -1,0 +1,76 @@
+name: Bug report
+description: Report a reproducible application, protocol, or packaging problem.
+title: "[Bug]: "
+labels: [bug, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting a problem. Remove or disable the laser before reproducing motion or protocol issues whenever possible.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Launch...
+        2. Connect...
+        3. Click...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Application version or commit
+      placeholder: v0.2.0 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac and macOS
+      placeholder: MacBook Pro M2, macOS 15.6
+    validations:
+      required: true
+  - type: input
+    id: controller
+    attributes:
+      label: Controller and GRBL firmware
+      placeholder: Arduino Uno + CNC Shield, GRBL 1.1h, CH340 USB
+  - type: dropdown
+    id: demo
+    attributes:
+      label: Does it reproduce in demo mode?
+      options:
+        - "Yes"
+        - "No"
+        - "Not tested"
+    validations:
+      required: true
+  - type: textarea
+    id: console
+    attributes:
+      label: Console output
+      description: Remove private paths or identifiers before posting.
+      render: text
+  - type: textarea
+    id: details
+    attributes:
+      label: Additional details
+      description: Add screenshots, G-code, logs, or controller settings that help reproduce the problem.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I followed appropriate laser and machine safety procedures.
+          required: true
+

@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=75", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lasergrbl-macos-controller"
+version = "0.2.0"
+description = "A modern GRBL controller for laser engravers and CNC machines on macOS."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Alex Kypraiou" }]
+keywords = ["grbl", "laser", "engraving", "cnc", "macos", "gcode"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: MacOS X",
+    "Intended Audience :: Manufacturing",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS :: MacOS X",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Human Machine Interfaces",
+]
+dependencies = [
+    "Pillow>=10.4,<12",
+    "PyQt6>=6.7,<7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3,<9",
+    "ruff>=0.12,<1",
+]
+build = [
+    "pyinstaller>=6.14,<7",
+]
+
+[project.gui-scripts]
+lasergrbl-macos = "lasergrbl_macos.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller"
+Issues = "https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/issues"
+Source = "https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"LaserGRBLMacOS.py" = ["E402", "I001"]
+"scripts/capture_demo.py" = ["E402", "I001"]

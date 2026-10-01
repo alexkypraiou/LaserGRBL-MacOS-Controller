@@ -1,0 +1,9 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Private security or safety report
+    url: https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/security/advisories/new
+    about: Privately report vulnerabilities or unsafe machine-control behavior.
+  - name: Troubleshooting guide
+    url: https://github.com/alexkypraiou/LaserGRBL-MacOS-Controller/blob/main/docs/TROUBLESHOOTING.md
+    about: Review common connection, GRBL, preview, and image-conversion problems.
+
